@@ -1,0 +1,346 @@
+import { login, logout, isLoggedIn, getCurrentUser, requireAuth } from './auth.js';
+import { api } from './api.js';
+import { initSync } from './sync.js';
+import { initNotifications, subscribeToNotifications } from './notifications.js';
+import { renderPersonasView, initPersonasView } from './personas.js';
+import { renderMascotasView, initMascotasView } from './mascotas.js';
+import { renderCensoView, initCensoView } from './censo.js';
+import { renderMapaView, initMapaView } from './mapa.js';
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+export function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  const icons = { success: 'circle-check', error: 'circle-exclamation', warning: 'triangle-exclamation', info: 'circle-info' };
+  toast.innerHTML = `<i class="fa-solid fa-${icons[type] || 'circle-info'}"></i> ${message}`;
+  container.appendChild(toast);
+  setTimeout(() => toast.classList.add('toast--visible'), 10);
+  setTimeout(() => {
+    toast.classList.remove('toast--visible');
+    setTimeout(() => toast.remove(), 400);
+  }, 3500);
+}
+
+// ── Router ──────────────────────────────────────────────────────────────────
+const routes = {
+  '/login':    { public: true,  render: renderLogin,        init: initLogin },
+  '/registro': { public: true,  render: renderRegistro,     init: initRegistro },
+  '/inicio':   { public: false, render: renderInicio,       init: initInicio },
+  '/mascotas': { public: false, render: renderMascotasView, init: initMascotasView },
+  '/censo':    { public: false, render: renderCensoView,    init: initCensoView },
+  '/mapa':     { public: false, render: renderMapaView,     init: initMapaView },
+  '/personas': { public: false, render: renderPersonasView, init: initPersonasView },
+};
+
+async function navigate(hash) {
+  const path = hash.replace('#', '') || '/login';
+  const route = routes[path];
+
+  if (!route) {
+    window.location.hash = isLoggedIn() ? '#/inicio' : '#/login';
+    return;
+  }
+
+  if (!route.public && !requireAuth()) return;
+  if (route.public && isLoggedIn() && (path === '/login' || path === '/registro')) {
+    window.location.hash = '#/inicio';
+    return;
+  }
+
+  const loggedIn = isLoggedIn();
+  toggleShell(loggedIn && !route.public);
+  setActiveNav(path);
+
+  if (loggedIn && !route.public) {
+    const main = document.getElementById('main-content');
+    main.innerHTML = route.render();
+    if (route.init) await route.init();
+  } else {
+    showAuthScreen(path);
+    if (route.init) await route.init();
+  }
+}
+
+function toggleShell(showApp) {
+  document.getElementById('auth-container').classList.toggle('hidden', showApp);
+  document.getElementById('app-container').classList.toggle('hidden', !showApp);
+  const user = getCurrentUser();
+  document.getElementById('header-usuario').textContent = user;
+}
+
+function showAuthScreen(path) {
+  document.querySelectorAll('.auth-screen').forEach(s => s.classList.remove('active'));
+  const id = path === '/registro' ? 'view-registro' : 'view-login';
+  document.getElementById(id)?.classList.add('active');
+}
+
+function setActiveNav(path) {
+  document.querySelectorAll('[data-route]').forEach(el => {
+    el.classList.toggle('active', el.dataset.route === path);
+  });
+}
+
+// ── Login view ──────────────────────────────────────────────────────────────
+function renderLogin() { return ''; }
+
+function initLogin() {
+  const form = document.getElementById('form-login');
+  if (!form || form._bound) return;
+  form._bound = true;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errDiv = document.getElementById('login-error');
+    errDiv.classList.add('hidden');
+    const btn = document.getElementById('btn-login');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ingresando…';
+    try {
+      await login(
+        document.getElementById('login-usuario').value.trim(),
+        document.getElementById('login-contrasena').value
+      );
+      window.location.hash = '#/inicio';
+      initNotifications();
+    } catch (err) {
+      errDiv.textContent = err.message;
+      errDiv.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión';
+    }
+  });
+  setupTogglePassword();
+}
+
+// ── Registro view ───────────────────────────────────────────────────────────
+function renderRegistro() { return ''; }
+
+function initRegistro() {
+  const form = document.getElementById('form-registro');
+  if (!form || form._bound) return;
+  form._bound = true;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errDiv = document.getElementById('registro-error');
+    const sucDiv = document.getElementById('registro-success');
+    errDiv.classList.add('hidden');
+    sucDiv.classList.add('hidden');
+    const btn = document.getElementById('btn-registro');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando cuenta…';
+    const dto = {
+      nombres:       document.getElementById('reg-nombres').value.trim(),
+      apellidos:     document.getElementById('reg-apellidos').value.trim(),
+      tipoDocumento: document.getElementById('reg-tipo-doc').value,
+      documento:     document.getElementById('reg-documento').value.trim(),
+      telefono:      document.getElementById('reg-telefono').value.trim(),
+      ciudad:        document.getElementById('reg-ciudad').value.trim(),
+      direccion:     document.getElementById('reg-direccion').value.trim(),
+      usuario:       document.getElementById('reg-usuario').value.trim(),
+      contrasena:    document.getElementById('reg-contrasena').value,
+    };
+    try {
+      await api.post('/personas/registro', dto);
+      sucDiv.textContent = '¡Cuenta creada! Ya puedes iniciar sesión.';
+      sucDiv.classList.remove('hidden');
+      form.reset();
+      setTimeout(() => { window.location.hash = '#/login'; }, 1800);
+    } catch (err) {
+      errDiv.textContent = err.message;
+      errDiv.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Crear cuenta';
+    }
+  });
+  setupTogglePassword();
+}
+
+// ── Inicio (dashboard) ──────────────────────────────────────────────────────
+function renderInicio() {
+  const user = getCurrentUser();
+  return `
+    <div class="view-header">
+      <h2><i class="fa-solid fa-house"></i> Inicio</h2>
+    </div>
+
+    <div class="dashboard-welcome card">
+      <div class="dashboard-welcome__avatar"><i class="fa-solid fa-user-circle"></i></div>
+      <div>
+        <p class="dashboard-welcome__greeting">Bienvenido,</p>
+        <h3 class="dashboard-welcome__name">${esc(user)}</h3>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card stat-card--loading"><i class="fa-solid fa-spinner fa-spin"></i><span class="stat-number">—</span><span class="stat-label">Mascotas</span></div>
+      <div class="stat-card stat-card--loading"><i class="fa-solid fa-spinner fa-spin"></i><span class="stat-number">—</span><span class="stat-label">Censos</span></div>
+      <div class="stat-card stat-card--loading"><i class="fa-solid fa-spinner fa-spin"></i><span class="stat-number">—</span><span class="stat-label">Personas</span></div>
+    </div>
+
+    <div class="dashboard-actions">
+      <a href="#/censo" class="dashboard-action-btn">
+        <i class="fa-solid fa-plus"></i>
+        <span>Nuevo Censo</span>
+      </a>
+      <a href="#/mascotas" class="dashboard-action-btn">
+        <i class="fa-solid fa-paw"></i>
+        <span>Mascotas</span>
+      </a>
+      <a href="#/mapa" class="dashboard-action-btn">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <span>Ver Mapa</span>
+      </a>
+      <a href="#/personas" class="dashboard-action-btn">
+        <i class="fa-solid fa-users"></i>
+        <span>Personas</span>
+      </a>
+    </div>
+
+    <div class="card" style="margin-top:1.25rem">
+      <div class="card-header">
+        <span class="card-title"><i class="fa-solid fa-bell"></i> Notificaciones push</span>
+      </div>
+      <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:.75rem">
+        Recibe alertas cuando se registre un nuevo censo.
+      </p>
+      <button class="btn btn-outline btn-sm" id="btn-subscribe-notif">
+        <i class="fa-solid fa-bell"></i> Suscribirse a notificaciones
+      </button>
+      <p id="notif-status" class="text-muted" style="margin-top:.5rem;font-size:.82rem"></p>
+    </div>`;
+}
+
+async function initInicio() {
+  try {
+    const [mascotas, censos, personas] = await Promise.all([
+      api.get('/mascotas'),
+      api.get('/censos'),
+      api.get('/personas'),
+    ]);
+    const data = [
+      { n: mascotas.length, icon: 'paw',            label: 'Mascotas',  href: '#/mascotas', color: '#A80081' },
+      { n: censos.length,   icon: 'clipboard-list', label: 'Censos',    href: '#/mapa',     color: '#0077CC' },
+      { n: personas.length, icon: 'users',           label: 'Personas',  href: '#/personas', color: '#2E7D32' },
+    ];
+    document.querySelectorAll('.stat-card').forEach((card, i) => {
+      const d = data[i];
+      card.classList.remove('stat-card--loading');
+      card.style.setProperty('--stat-color', d.color);
+      card.innerHTML = `
+        <a href="${d.href}" style="text-decoration:none;color:inherit;display:contents">
+          <i class="fa-solid fa-${d.icon}"></i>
+          <span class="stat-number">${d.n}</span>
+          <span class="stat-label">${d.label}</span>
+        </a>`;
+    });
+  } catch { /* stats not critical */ }
+
+  // notifications subscribe button
+  const btn = document.getElementById('btn-subscribe-notif');
+  const status = document.getElementById('notif-status');
+  if (!btn) return;
+
+  if (!('PushManager' in window)) {
+    btn.disabled = true;
+    status.textContent = 'Este navegador no soporta notificaciones push.';
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  const existing = await reg?.pushManager.getSubscription().catch(() => null);
+  if (existing) {
+    btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Ya estás suscrito';
+    btn.disabled = true;
+    status.textContent = 'Recibirás notificaciones de nuevos censos.';
+    return;
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Suscribiendo…';
+    try {
+      await subscribeToNotifications();
+      btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Ya estás suscrito';
+      status.textContent = 'Recibirás notificaciones de nuevos censos.';
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-bell"></i> Suscribirse a notificaciones';
+      status.textContent = 'Error: ' + err.message;
+    }
+  });
+}
+
+// ── Password toggle ──────────────────────────────────────────────────────────
+function setupTogglePassword() {
+  document.querySelectorAll('.toggle-password').forEach(btn => {
+    if (btn._bound) return;
+    btn._bound = true;
+    btn.addEventListener('click', () => {
+      const input = btn.previousElementSibling;
+      if (!input) return;
+      const isPass = input.type === 'password';
+      input.type = isPass ? 'text' : 'password';
+      btn.querySelector('i').className = `fa-solid fa-eye${isPass ? '-slash' : ''}`;
+    });
+  });
+}
+
+// ── Offline banner ───────────────────────────────────────────────────────────
+function initOfflineBanner() {
+  const banner = document.getElementById('offline-banner');
+  const update = () => banner.classList.toggle('hidden', navigator.onLine);
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
+}
+
+// ── Logout buttons ───────────────────────────────────────────────────────────
+function initLogoutButtons() {
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+  document.getElementById('btn-logout-sidebar')?.addEventListener('click', logout);
+}
+
+// ── Sidebar toggle (mobile) ──────────────────────────────────────────────────
+function initSidebarToggle() {
+  const btn = document.getElementById('btn-menu-toggle');
+  const sidebar = document.getElementById('sidebar');
+  btn?.addEventListener('click', () => sidebar?.classList.toggle('sidebar--open'));
+  document.getElementById('main-content')?.addEventListener('click', () => {
+    sidebar?.classList.remove('sidebar--open');
+  });
+}
+
+// ── Service Worker ───────────────────────────────────────────────────────────
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+  } catch (err) {
+    console.warn('SW registration failed:', err);
+  }
+}
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+async function bootstrap() {
+  initOfflineBanner();
+  initLogoutButtons();
+  initSidebarToggle();
+  window.addEventListener('app:toast', (e) => showToast(e.detail.msg, e.detail.type));
+  initSync();
+  await registerServiceWorker();
+
+  window.addEventListener('hashchange', () => navigate(window.location.hash));
+  const initial = window.location.hash || (isLoggedIn() ? '#/inicio' : '#/login');
+  await navigate(initial);
+
+  if (isLoggedIn()) initNotifications();
+}
+
+bootstrap();
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}

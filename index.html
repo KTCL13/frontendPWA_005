@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#A80081" />
+  <meta name="description" content="Aplicación para el censo de mascotas con geolocalización" />
+  <title>Censo de Mascotas</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+
+  <!-- Font Awesome 6 Free -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- Banner offline -->
+  <div id="offline-banner" class="offline-banner hidden">
+    <i class="fa-solid fa-wifi-slash"></i>
+    Sin conexión — los registros se guardarán localmente
+  </div>
+
+  <!-- ── Contenedor de autenticación ── -->
+  <div id="auth-container">
+    <!-- Vista Login -->
+    <section id="view-login" class="auth-screen active">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <i class="fa-solid fa-paw"></i>
+          <h1>Censo de Mascotas</h1>
+          <p>Ingresa a tu cuenta</p>
+        </div>
+        <form id="form-login" novalidate>
+          <div class="field-group">
+            <label for="login-usuario"><i class="fa-solid fa-user"></i> Usuario</label>
+            <input type="text" id="login-usuario" placeholder="Nombre de usuario" autocomplete="username" required />
+          </div>
+          <div class="field-group">
+            <label for="login-contrasena"><i class="fa-solid fa-lock"></i> Contraseña</label>
+            <div class="input-password-wrapper">
+              <input type="password" id="login-contrasena" placeholder="Contraseña" autocomplete="current-password" required />
+              <button type="button" class="toggle-password" tabindex="-1">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
+          </div>
+          <div id="login-error" class="alert alert-error hidden"></div>
+          <button type="submit" class="btn btn-primary btn-full" id="btn-login">
+            <i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión
+          </button>
+        </form>
+        <p class="auth-link">¿No tienes cuenta? <a href="#/registro">Regístrate aquí</a></p>
+      </div>
+    </section>
+
+    <!-- Vista Registro -->
+    <section id="view-registro" class="auth-screen">
+      <div class="auth-card auth-card--wide">
+        <div class="auth-logo">
+          <i class="fa-solid fa-user-plus"></i>
+          <h1>Crear cuenta</h1>
+          <p>Regístrate como encuestador</p>
+        </div>
+        <form id="form-registro" novalidate>
+          <div class="form-grid-2">
+            <div class="field-group">
+              <label for="reg-nombres">Nombres</label>
+              <input type="text" id="reg-nombres" placeholder="Tu(s) nombre(s)" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-apellidos">Apellidos</label>
+              <input type="text" id="reg-apellidos" placeholder="Tu(s) apellido(s)" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-tipo-doc">Tipo de documento</label>
+              <select id="reg-tipo-doc" required>
+                <option value="">Seleccionar</option>
+                <option value="CC">CC - Cédula de Ciudadanía</option>
+                <option value="CE">CE - Cédula de Extranjería</option>
+                <option value="TI">TI - Tarjeta de Identidad</option>
+                <option value="Pasaporte">Pasaporte</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="reg-documento">Número de documento</label>
+              <input type="text" id="reg-documento" placeholder="Tu número de documento" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-telefono">Teléfono</label>
+              <input type="tel" id="reg-telefono" placeholder="Tu número de celular" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-ciudad">Ciudad</label>
+              <input type="text" id="reg-ciudad" placeholder="Tu ciudad" required />
+            </div>
+            <div class="field-group field-group--full">
+              <label for="reg-direccion">Dirección</label>
+              <input type="text" id="reg-direccion" placeholder="Tu dirección" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-usuario">Usuario</label>
+              <input type="text" id="reg-usuario" placeholder="Elige un nombre de usuario" autocomplete="username" required />
+            </div>
+            <div class="field-group">
+              <label for="reg-contrasena">Contraseña</label>
+              <div class="input-password-wrapper">
+                <input type="password" id="reg-contrasena" placeholder="Mínimo 6 caracteres" autocomplete="new-password" required />
+                <button type="button" class="toggle-password" tabindex="-1">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="registro-error" class="alert alert-error hidden"></div>
+          <div id="registro-success" class="alert alert-success hidden"></div>
+          <button type="submit" class="btn btn-primary btn-full" id="btn-registro">
+            <i class="fa-solid fa-user-plus"></i> Crear cuenta
+          </button>
+        </form>
+        <p class="auth-link">¿Ya tienes cuenta? <a href="#/login">Inicia sesión</a></p>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Shell de la aplicación (visible tras login) ── -->
+  <div id="app-container" class="hidden">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button id="btn-menu-toggle" class="btn-icon" aria-label="Menú">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <a href="#/inicio" class="header-brand">
+          <i class="fa-solid fa-paw"></i>
+          <span>Censo Mascotas</span>
+        </a>
+      </div>
+      <div class="header-right">
+        <span id="header-usuario" class="header-user"></span>
+        <button id="btn-logout" class="btn-icon" title="Cerrar sesión">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar (desktop) -->
+      <aside id="sidebar" class="sidebar">
+        <nav class="sidebar-nav">
+          <a href="#/inicio" class="nav-item" data-route="/inicio">
+            <i class="fa-solid fa-house"></i>
+            <span>Inicio</span>
+          </a>
+          <a href="#/mascotas" class="nav-item" data-route="/mascotas">
+            <i class="fa-solid fa-paw"></i>
+            <span>Mascotas</span>
+          </a>
+          <a href="#/censo" class="nav-item" data-route="/censo">
+            <i class="fa-solid fa-clipboard-list"></i>
+            <span>Nuevo Censo</span>
+          </a>
+          <a href="#/mapa" class="nav-item" data-route="/mapa">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <span>Mapa</span>
+          </a>
+          <a href="#/personas" class="nav-item" data-route="/personas">
+            <i class="fa-solid fa-users"></i>
+            <span>Personas</span>
+          </a>
+        </nav>
+        <div class="sidebar-footer">
+          <button id="btn-logout-sidebar" class="nav-item nav-item--logout">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Contenido principal -->
+      <main id="main-content" class="main-content">
+        <!-- Las vistas se inyectan aquí dinámicamente -->
+        <div class="loading-view">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <p>Cargando...</p>
+        </div>
+      </main>
+    </div>
+
+    <!-- Bottom nav (mobile) -->
+    <nav class="bottom-nav">
+      <a href="#/inicio" class="bottom-nav-item" data-route="/inicio">
+        <i class="fa-solid fa-house"></i>
+        <span>Inicio</span>
+      </a>
+      <a href="#/mascotas" class="bottom-nav-item" data-route="/mascotas">
+        <i class="fa-solid fa-paw"></i>
+        <span>Mascotas</span>
+      </a>
+      <a href="#/censo" class="bottom-nav-item bottom-nav-item--main" data-route="/censo">
+        <i class="fa-solid fa-plus"></i>
+      </a>
+      <a href="#/mapa" class="bottom-nav-item" data-route="/mapa">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <span>Mapa</span>
+      </a>
+      <a href="#/personas" class="bottom-nav-item" data-route="/personas">
+        <i class="fa-solid fa-users"></i>
+        <span>Personas</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

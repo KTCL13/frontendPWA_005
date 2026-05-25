@@ -1,0 +1,497 @@
+{
+  "info": {
+    "name": "Censo PWA API",
+    "description": "Colección de endpoints para pruebas de API REST del sistema de censo de mascotas",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.environment.set('jwt_token', jsonData.token);",
+                  "  pm.test('Status code is 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "  pm.test('Token existe', function () { pm.expect(jsonData.token).to.exist; });",
+                  "  pm.test('Tipo token es Bearer', function () { pm.expect(jsonData.tipoToken).to.equal('Bearer'); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"admin\",\n  \"contrasena\": \"Admin123*\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personas",
+      "item": [
+        {
+          "name": "Registrar Persona (Alias)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.environment.set('persona_id', jsonData.id);",
+                  "  pm.test('Persona registrada', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "  pm.test('ID existe', function () { pm.expect(jsonData.id).to.exist; });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Maria\",\n  \"apellidos\": \"Lopez\",\n  \"tipoDocumento\": \"CC\",\n  \"documento\": \"1234567891\",\n  \"direccion\": \"Cra 10 #20-30\",\n  \"telefono\": \"3009876543\",\n  \"ciudad\": \"Bogotá\",\n  \"usuario\": \"maria.lopez\",\n  \"contrasena\": \"Secure123*\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/personas/registro",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "personas", "registro"]
+            }
+          }
+        },
+        {
+          "name": "Crear Persona",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.environment.set('persona_id', jsonData.id);",
+                  "  pm.test('Persona creada', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "  pm.test('ID existe', function () { pm.expect(jsonData.id).to.exist; });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Juan Carlos\",\n  \"apellidos\": \"Perez García\",\n  \"tipoDocumento\": \"CC\",\n  \"documento\": \"1234567890\",\n  \"direccion\": \"Calle Principal 123\",\n  \"telefono\": \"3001234567\",\n  \"ciudad\": \"Bogotá\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/personas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "personas"]
+            }
+          }
+        },
+        {
+          "name": "Listar Personas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Respuesta es array', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test('Sin campo contrasena', function () { ",
+                  "  const personas = pm.response.json();",
+                  "  if (personas.length > 0) {",
+                  "    pm.expect(personas[0]).to.not.have.property('contrasena');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/personas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "personas"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Persona por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Tiene ID', function () { pm.expect(pm.response.json().id).to.exist; });",
+                  "pm.test('Sin contrasena', function () { pm.expect(pm.response.json()).to.not.have.property('contrasena'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/personas/{{persona_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "personas", "{{persona_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mascotas",
+      "item": [
+        {
+          "name": "Crear Mascota",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.environment.set('mascota_id', jsonData.id);",
+                  "  pm.test('Mascota creada', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "  pm.test('ID existe', function () { pm.expect(jsonData.id).to.exist; });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Firulais\",\n  \"tipo\": \"PERRO\",\n  \"genero\": \"MACHO\",\n  \"edad\": 3.5,\n  \"fotografia\": \"https://via.placeholder.com/150?text=Firulais\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/mascotas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "mascotas"]
+            }
+          }
+        },
+        {
+          "name": "Listar Mascotas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Respuesta es array', function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mascotas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "mascotas"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Mascota por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Tiene ID y nombre', function () { ",
+                  "  const mascota = pm.response.json();",
+                  "  pm.expect(mascota.id).to.exist;",
+                  "  pm.expect(mascota.nombre).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mascotas/{{mascota_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "mascotas", "{{mascota_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Censos",
+      "item": [
+        {
+          "name": "Crear Censo (con JWT)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Base64 de prueba (1 KB), puedes reemplazar con una imagen real codificada en base64",
+                  "const smallBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8VAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k'",
+                  "pm.environment.set('test_base64_foto', smallBase64);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const jsonData = pm.response.json();",
+                  "  pm.environment.set('censo_id', jsonData.id);",
+                  "  pm.test('Censo creado', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "  pm.test('Retorna datos anidados', function () { ",
+                  "    pm.expect(jsonData.mascota).to.exist;",
+                  "    pm.expect(jsonData.dueno).to.exist;",
+                  "  });",
+                  "} else if (pm.response.code === 401) {",
+                  "  pm.test('Verifica JWT válido', function () { pm.expect(pm.response.code).to.equal(401); });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idMascota\": \"{{mascota_id}}\",\n  \"idDueno\": \"{{persona_id}}\",\n  \"fotografia\": \"{{test_base64_foto}}\",\n  \"lat\": 4.6097,\n  \"lon\": -74.0817,\n  \"idProyecto\": \"PWA_GRUPO_01\",\n  \"color\": \"#FF5733\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/censos",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "censos"]
+            }
+          }
+        },
+        {
+          "name": "Crear Censo de Prueba Push (rápido)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200/201', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const jsonData = pm.response.json();",
+                  "pm.environment.set('censo_id', jsonData.id);",
+                  "pm.test('Censo id guardado', function () { pm.expect(jsonData.id).to.exist; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idMascota\": \"{{mascota_id}}\",\n  \"idDueno\": \"{{persona_id}}\",\n  \"fotografia\": \"{{test_base64_foto}}\",\n  \"lat\": 4.6101,\n  \"lon\": -74.0820,\n  \"idProyecto\": \"PUSH_TEST\",\n  \"color\": \"#00A86B\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/censos",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "censos"]
+            }
+          }
+        },
+        {
+          "name": "Listar Censos (para Mapa)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Retorna array de censos', function () { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test('Cada censo tiene estructura para mapa', function () { ",
+                  "  const censos = pm.response.json();",
+                  "  if (censos.length > 0) {",
+                  "    const censo = censos[0];",
+                  "    pm.expect(censo.lat).to.exist;",
+                  "    pm.expect(censo.lon).to.exist;",
+                  "    pm.expect(censo.color).to.exist;",
+                  "    pm.expect(censo.mascota).to.exist;",
+                  "    pm.expect(censo.dueno).to.exist;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/censos",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "censos"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Censo por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "pm.test('Retorna censo anidado', function () { ",
+                  "  const censo = pm.response.json();",
+                  "  pm.expect(censo.id).to.exist;",
+                  "  pm.expect(censo.mascota).to.exist;",
+                  "  pm.expect(censo.dueno).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/censos/{{censo_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "censos", "{{censo_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Push Notifications",
+      "item": [
+        {
+          "name": "Obtener clave pública VAPID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 200', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Trae publicKey', function () { pm.expect(json.publicKey).to.be.a('string').and.not.empty; });",
+                  "pm.collectionVariables.set('vapid_public_key', json.publicKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/push/key",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "push", "key"]
+            }
+          }
+        },
+        {
+          "name": "Suscribirse a Push (con JWT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code 204 (No Content)', function () { pm.expect(pm.response.code).to.equal(204); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/test-endpoint-{{$timestamp}}\",\n  \"expirationTime\": null,\n  \"keys\": {\n    \"p256dh\": \"BCEllqKoW7pNRWKR3p2H1PJh+sRLfMqXVhD0+A7wA2Q0aRpC8KN0K7m4b5L8Y8q8qP8m8r2P9s3T4u5V6w7X8Y\",\n    \"auth\": \"YgL6R4qZ8t9U0V1W2X3Y4Z5A6B7C8D9E0F1G2H3I4\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/push/subscriptions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "push", "subscriptions"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
