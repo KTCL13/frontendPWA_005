@@ -635,3 +635,301 @@ tr:hover td { background: var(--primary-light); }
   transition: background var(--transition), border-color var(--transition);
 }
 .btn-secondary:hover { background: var(--border); border-color: var(--text-muted); }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE FIXES
+   ════════════════════════════════════════════════════════════ */
+
+/* 1. Hide sidebar completely on mobile — only bottom nav is used */
+@media (max-width: 767px) {
+  .sidebar {
+    display: none !important;
+  }
+  /* Hide the hamburger toggle button on mobile since sidebar is disabled */
+  #btn-menu-toggle {
+    display: none !important;
+  }
+}
+
+/* 2. Personas — responsive table on mobile */
+@media (max-width: 767px) {
+  /* Wrap table in a horizontal scroller */
+  #personas-list .table-wrapper,
+  #personas-list {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table {
+    min-width: 540px;
+  }
+  /* Make modal form single-column */
+  #modal-persona .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 3. Mapa — fix z-index so map never overlaps UI chrome */
+.map-wrapper {
+  position: relative;
+  z-index: 0;
+}
+.leaflet-container {
+  z-index: 0 !important;
+}
+/* Leaflet controls stay inside wrapper */
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 1 !important;
+}
+/* Popups need to be above map tiles but below app chrome */
+.leaflet-popup-pane {
+  z-index: 1000 !important;
+}
+@media (max-width: 767px) {
+  .map-wrapper {
+    height: calc(100dvh - var(--header-h) - var(--bottom-nav-h) - 5rem);
+    min-height: 280px;
+  }
+  /* Page header above map must not be overlapped */
+  .view-header {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+/* 4. Photo upload area — redesigned with "Subir archivo" INSIDE the box */
+.foto-upload-area {
+  position: relative;
+  cursor: pointer;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+}
+/* The "Subir archivo" button sits at the bottom of the coloured area */
+.foto-upload-area .btn-subir-archivo {
+  margin-top: .6rem;
+  background: rgba(255,255,255,.75);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: .35rem .9rem;
+  font-size: .8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  pointer-events: auto;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+/* Camera-selector row (front/back) — shown only on mobile */
+.foto-camera-row {
+  display: none;
+}
+@media (max-width: 767px) {
+  .foto-camera-row {
+    display: flex;
+    gap: .5rem;
+    margin-top: .5rem;
+  }
+  .foto-camera-row button {
+    flex: 1;
+  }
+}
+/* Hide the old external source-btn row on ALL screens
+   (replaced by inline button + camera-row) */
+.foto-source-btns {
+  display: none !important;
+}
+
+/* ── Personas form grid (responsive 2-col → 1-col on mobile) ── */
+.persona-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+}
+@media (max-width: 600px) {
+  .persona-form-grid {
+    grid-template-columns: 1fr;
+  }
+  /* Modal bottom-sheet on mobile: limit height and make it scrollable */
+  #modal-persona .modal-box {
+    max-height: 88dvh;
+    overflow-y: auto;
+  }
+  #modal-persona .modal-box form {
+    padding: 1rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FIXES PATCH
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Botones separados: Abrir cámara / Subir archivo ─────────── */
+.foto-btns-row {
+  display: flex;
+  gap: .75rem;
+  margin-bottom: .25rem;
+}
+.foto-btns-row .btn {
+  flex: 1;
+  justify-content: center;
+  gap: .4rem;
+}
+.foto-btn-camara {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.foto-btn-camara:hover {
+  background: var(--primary-light);
+}
+.foto-btn-archivo {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+.foto-btn-archivo:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+/* Ocultar el antiguo foto-upload-area si queda en algún módulo */
+.foto-upload-area { display: none !important; }
+/* Ocultar la fila de cámara anterior (trasera/delantera externos) */
+.foto-camera-row { display: none !important; }
+
+/* ── 2. Popup elección de cámara ────────────────────────────────── */
+.camera-choice-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.camera-choice-box {
+  background: var(--white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,.22));
+  width: 100%;
+  max-width: 320px;
+  overflow: hidden;
+}
+.camera-choice-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: 1rem 1.1rem .75rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+}
+.camera-choice-header i { color: var(--primary); font-size: 1.1rem; }
+.camera-choice-header span { flex: 1; }
+.camera-choice-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  padding: .2rem .4rem;
+  border-radius: var(--radius-sm);
+}
+.camera-choice-close:hover { background: var(--bg); color: var(--text); }
+.camera-choice-btns {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  padding: 1rem 1.1rem 1.1rem;
+}
+.camera-choice-btn {
+  display: flex !important;
+  align-items: center;
+  gap: .6rem;
+  justify-content: flex-start !important;
+  padding: .75rem 1rem !important;
+  font-size: .95rem;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+.camera-choice-btn:hover {
+  background: var(--primary-light) !important;
+}
+.camera-choice-btn i { font-size: 1.1rem; width: 22px; text-align: center; }
+
+/* ── 3. Personas tabla responsiva en móvil ──────────────────────── */
+@media (max-width: 600px) {
+  /* Ocultar la tabla, mostrar cards tipo lista */
+  .personas-table thead {
+    display: none;
+  }
+  .personas-table,
+  .personas-table tbody,
+  .personas-table tr,
+  .personas-table td {
+    display: block;
+    width: 100%;
+  }
+  .personas-table tr {
+    background: var(--white);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: .75rem;
+    border: 1.5px solid var(--border);
+    padding: .5rem 0;
+    overflow: hidden;
+  }
+  .personas-table tr:hover td {
+    background: transparent;
+  }
+  .personas-table td {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .45rem .9rem;
+    border-bottom: 1px solid var(--border);
+    font-size: .87rem;
+  }
+  .personas-table td:last-child {
+    border-bottom: none;
+  }
+  .personas-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: .73rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--primary);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+  /* Quitar min-width fijo de la tabla en móvil */
+  .personas-table {
+    min-width: unset !important;
+  }
+  #personas-list .table-wrapper {
+    box-shadow: none;
+    background: transparent;
+    border-radius: 0;
+  }
+}
+
+/* Leaflet popups y controles por encima del resto de la UI */
+.leaflet-popup-pane,
+.leaflet-popup {
+  z-index: 1000 !important;
+}
+.leaflet-control-container,
+.leaflet-control-zoom {
+  z-index: 1000 !important;
+}
+/* Popup del mapa en la vista de mapa principal */
+#map-container .leaflet-popup-pane {
+  z-index: 1000 !important;
+}

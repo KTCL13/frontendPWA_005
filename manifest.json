@@ -1,6 +1,6 @@
 {
-  "name": "Censo de Mascotas",
-  "short_name": "CensoMasc",
+  "name": "Censo de Mascotas PWA 005",
+  "short_name": "CensoMascPWA005",
   "description": "Aplicación para el censo de mascotas con geolocalización",
   "start_url": "/",
   "display": "standalone",

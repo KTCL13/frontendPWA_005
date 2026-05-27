@@ -15,7 +15,7 @@ export function renderMascotasView() {
       </button>
     </div>
 
-    <!-- Modal registro / edición -->
+    <!-- Modal registro -->
     <div id="modal-mascota" class="modal hidden">
       <div class="modal-backdrop"></div>
       <div class="modal-box">
@@ -28,11 +28,15 @@ export function renderMascotasView() {
           <!-- Foto -->
           <div class="field-group">
             <label><i class="fa-solid fa-image"></i> Foto de la mascota</label>
-            <div class="foto-upload-area" id="m-foto-drop">
-              <i class="fa-solid fa-camera fa-2x"></i>
-              <p>Toca para seleccionar foto</p>
-              <input type="file" id="m-foto-input" accept="image/*" style="display:none" />
+            <div class="foto-btns-row">
+              <button type="button" class="btn btn-outline foto-btn-camara" id="btn-m-abrir-camara">
+                <i class="fa-solid fa-camera"></i> Abrir cámara
+              </button>
+              <button type="button" class="btn btn-outline foto-btn-archivo" id="btn-m-subir-archivo">
+                <i class="fa-solid fa-folder-open"></i> Subir archivo
+              </button>
             </div>
+            <input type="file" id="m-foto-archivo" accept="image/*" style="display:none" />
             <div id="m-foto-preview-wrap" class="hidden" style="margin-top:.5rem;position:relative">
               <img id="m-foto-preview" alt="Vista previa"
                 style="width:100%;max-height:180px;object-fit:cover;border-radius:var(--radius-md);" />
@@ -81,24 +85,6 @@ export function renderMascotasView() {
       </div>
     </div>
 
-    <!-- Modal confirmar borrar -->
-    <div id="modal-borrar" class="modal hidden">
-      <div class="modal-backdrop"></div>
-      <div class="modal-box" style="max-width:360px">
-        <div class="modal-header">
-          <h3><i class="fa-solid fa-trash"></i> Confirmar</h3>
-          <button class="modal-close" id="btn-close-borrar"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <p style="margin:.5rem 0 1.25rem">¿Seguro que deseas eliminar esta mascota?</p>
-        <div style="display:flex;gap:.75rem">
-          <button class="btn btn-danger btn-full" id="btn-confirm-borrar">
-            <i class="fa-solid fa-trash"></i> Eliminar
-          </button>
-          <button class="btn btn-outline btn-full" id="btn-cancel-borrar">Cancelar</button>
-        </div>
-      </div>
-    </div>
-
     <div id="mascotas-grid" class="mascotas-grid">
       <div class="loading-inline"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</div>
     </div>`;
@@ -135,48 +121,35 @@ async function loadMascotas() {
             <i class="fa-solid fa-venus-mars"></i> ${esc(m.genero)}
           </p>
         </div>
-        <div class="mascota-card-footer">
-          <button class="btn btn-outline btn-sm" style="flex:1" data-id="${esc(m.id)}" data-action="editar"
-            data-nombre="${esc(m.nombre)}" data-tipo="${esc(m.tipo)}" data-edad="${esc(m.edad)}"
-            data-genero="${esc(m.genero)}" data-foto="${esc(m.fotografia || '')}">
-            <i class="fa-solid fa-pen"></i> Editar
-          </button>
-          <button class="btn btn-danger btn-sm" style="flex:1" data-id="${esc(m.id)}" data-action="borrar">
-            <i class="fa-solid fa-trash"></i> Borrar
-          </button>
-        </div>
       </div>`).join('');
-
-    grid.addEventListener('click', onCardAction);
   } catch (err) {
     grid.innerHTML = `<p class="alert alert-error">${esc(err.message)}</p>`;
   }
 }
 
-function onCardAction(e) {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  if (btn.dataset.action === 'editar') openEditModal(btn.dataset);
-  if (btn.dataset.action === 'borrar') openBorrarModal(btn.dataset.id);
-}
+// ── Modal registro ─────────────────────────────────────────────────────────
 
-// ── Modal registro/edición ─────────────────────────────────────────────────
-
-let _editingId = null;
 let _currentFotoFile = null;
 
 function setupModal() {
-  const modal    = document.getElementById('modal-mascota');
-  const btnOpen  = document.getElementById('btn-nueva-mascota');
-  const btnClose = document.getElementById('btn-close-modal');
-  const backdrop = modal?.querySelector('.modal-backdrop');
-  const form     = document.getElementById('form-mascota');
-  const fotoDrop = document.getElementById('m-foto-drop');
-  const fotoInput= document.getElementById('m-foto-input');
-  const rmFoto   = document.getElementById('btn-m-remove-foto');
+  const modal        = document.getElementById('modal-mascota');
+  const btnOpen      = document.getElementById('btn-nueva-mascota');
+  const btnClose     = document.getElementById('btn-close-modal');
+  const backdrop     = modal?.querySelector('.modal-backdrop');
+  const form         = document.getElementById('form-mascota');
+  const fotoArchivo  = document.getElementById('m-foto-archivo');
+  const btnCamara    = document.getElementById('btn-m-abrir-camara');
+  const btnArchivo   = document.getElementById('btn-m-subir-archivo');
+  const rmFoto       = document.getElementById('btn-m-remove-foto');
+
+  function onCapture(file) {
+    _currentFotoFile = file;
+    const url = URL.createObjectURL(file);
+    document.getElementById('m-foto-preview').src = url;
+    document.getElementById('m-foto-preview-wrap').classList.remove('hidden');
+  }
 
   btnOpen?.addEventListener('click', () => {
-    _editingId = null;
     _currentFotoFile = null;
     form?.reset();
     clearMFoto();
@@ -186,15 +159,25 @@ function setupModal() {
   btnClose?.addEventListener('click', closeModal);
   backdrop?.addEventListener('click', closeModal);
 
-  fotoDrop?.addEventListener('click', () => fotoInput?.click());
-  fotoInput?.addEventListener('change', () => {
-    if (fotoInput.files[0]) {
-      _currentFotoFile = fotoInput.files[0];
+  // Botón "Abrir cámara" → muestra popup de elección frontal/trasera
+  btnCamara?.addEventListener('click', () => {
+    openCameraChoiceModal(onCapture);
+  });
+
+  // Botón "Subir archivo" → selector de archivo
+  btnArchivo?.addEventListener('click', () => {
+    fotoArchivo?.click();
+  });
+
+  fotoArchivo?.addEventListener('change', () => {
+    if (fotoArchivo.files[0]) {
+      _currentFotoFile = fotoArchivo.files[0];
       const url = URL.createObjectURL(_currentFotoFile);
       document.getElementById('m-foto-preview').src = url;
       document.getElementById('m-foto-preview-wrap').classList.remove('hidden');
     }
   });
+
   rmFoto?.addEventListener('click', () => { _currentFotoFile = null; clearMFoto(); });
 
   form?.addEventListener('submit', handleSubmit);
@@ -203,44 +186,23 @@ function setupModal() {
 function clearMFoto() {
   document.getElementById('m-foto-preview-wrap')?.classList.add('hidden');
   document.getElementById('m-foto-status').textContent = '';
-  const input = document.getElementById('m-foto-input');
-  if (input) input.value = '';
-}
-
-function openEditModal(data) {
-  _editingId = data.id;
-  _currentFotoFile = null;
-  document.getElementById('modal-mascota-title').innerHTML = '<i class="fa-solid fa-pen"></i> Editar mascota';
-  document.getElementById('m-nombre').value = data.nombre || '';
-  document.getElementById('m-tipo').value   = data.tipo   || '';
-  document.getElementById('m-edad').value   = data.edad   || '';
-  document.getElementById('m-genero').value = data.genero || '';
-
-  if (data.foto) {
-    const img  = document.getElementById('m-foto-preview');
-    img.src    = data.foto;
-    document.getElementById('m-foto-preview-wrap').classList.remove('hidden');
-  } else {
-    clearMFoto();
-  }
-
-  document.getElementById('modal-mascota').classList.remove('hidden');
+  const a = document.getElementById('m-foto-archivo');
+  if (a) a.value = '';
 }
 
 async function handleSubmit(e) {
   e.preventDefault();
-  const errDiv  = document.getElementById('mascota-error');
-  const statusEl= document.getElementById('m-foto-status');
+  const errDiv   = document.getElementById('mascota-error');
+  const statusEl = document.getElementById('m-foto-status');
   errDiv.classList.add('hidden');
   const btn = document.getElementById('btn-submit-mascota');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';
 
   try {
-    // Subir foto si hay una nueva (opcional — si falla no bloquea el guardado)
     let fotografia;
     if (_currentFotoFile) {
-      statusEl.textContent = 'Subiendo foto…';
+      statusEl.textContent = 'Subiendo foto a Cloudinary…';
       try {
         fotografia = await uploadToCloudinary(_currentFotoFile);
         statusEl.textContent = '';
@@ -251,12 +213,6 @@ async function handleSubmit(e) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
         return;
-      }
-    } else {
-      // conservar la foto existente (en edición)
-      fotografia = document.getElementById('m-foto-preview').src || undefined;
-      if (fotografia && (fotografia.startsWith('blob:') || fotografia.startsWith('data:'))) {
-        fotografia = undefined;
       }
     }
 
@@ -269,13 +225,8 @@ async function handleSubmit(e) {
     };
 
     if (navigator.onLine) {
-      if (_editingId) {
-        await api.patch(`/mascotas/${_editingId}`, dto);
-        showToast('Mascota actualizada', 'success');
-      } else {
-        await api.post('/mascotas', dto);
-        showToast('Mascota registrada', 'success');
-      }
+      await api.post('/mascotas', dto);
+      showToast('Mascota registrada', 'success');
     } else {
       await enqueue('mascotas_queue', dto);
       showToast('Sin conexión — guardado localmente', 'warning');
@@ -284,7 +235,6 @@ async function handleSubmit(e) {
     closeModal();
     document.getElementById('form-mascota').reset();
     clearMFoto();
-    _editingId = null;
     _currentFotoFile = null;
     await loadMascotas();
   } catch (err) {
@@ -301,41 +251,104 @@ function closeModal() {
   document.getElementById('mascota-error')?.classList.add('hidden');
 }
 
-// ── Modal borrar ────────────────────────────────────────────────────────────
+// ── Popup de elección de cámara (frontal / trasera) ────────────────────────
 
-let _deletingId = null;
+function openCameraChoiceModal(onCapture) {
+  const overlay = document.createElement('div');
+  overlay.className = 'camera-choice-overlay';
+  overlay.innerHTML = `
+    <div class="camera-choice-box">
+      <div class="camera-choice-header">
+        <i class="fa-solid fa-camera"></i>
+        <span>Seleccionar cámara</span>
+        <button class="camera-choice-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="camera-choice-btns">
+        <button class="btn btn-outline camera-choice-btn" data-facing="environment">
+          <i class="fa-solid fa-camera"></i>
+          <span>Cámara trasera</span>
+        </button>
+        <button class="btn btn-outline camera-choice-btn" data-facing="user">
+          <i class="fa-solid fa-camera-rotate"></i>
+          <span>Cámara frontal</span>
+        </button>
+      </div>
+    </div>`;
 
-function openBorrarModal(id) {
-  _deletingId = id;
-  const modal = document.getElementById('modal-borrar');
-  modal.classList.remove('hidden');
+  document.body.appendChild(overlay);
 
-  document.getElementById('btn-close-borrar').onclick  = closeBorrarModal;
-  document.getElementById('btn-cancel-borrar').onclick = closeBorrarModal;
-  modal.querySelector('.modal-backdrop').onclick       = closeBorrarModal;
-  document.getElementById('btn-confirm-borrar').onclick = confirmBorrar;
+  const close = () => overlay.remove();
+  overlay.querySelector('.camera-choice-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  overlay.querySelectorAll('.camera-choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      close();
+      openCameraModal(onCapture, btn.dataset.facing);
+    });
+  });
 }
 
-function closeBorrarModal() {
-  document.getElementById('modal-borrar')?.classList.add('hidden');
-  _deletingId = null;
-}
+// ── Cámara getUserMedia ────────────────────────────────────────────────────
 
-async function confirmBorrar() {
-  if (!_deletingId) return;
-  const btn = document.getElementById('btn-confirm-borrar');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Eliminando…';
-  try {
-    await api.delete(`/mascotas/${_deletingId}`);
-    showToast('Mascota eliminada', 'success');
-    closeBorrarModal();
-    await loadMascotas();
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-trash"></i> Eliminar';
+function openCameraModal(onCapture, facingMode = 'environment') {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:1rem';
+
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.playsInline = true;
+  video.style.cssText = 'max-width:100%;max-height:60vh;border-radius:8px;background:#000';
+
+  const btnCapture = document.createElement('button');
+  btnCapture.innerHTML = '<i class="fa-solid fa-camera"></i> Capturar foto';
+  btnCapture.className = 'btn btn-primary';
+
+  const btnCancel = document.createElement('button');
+  btnCancel.innerHTML = '<i class="fa-solid fa-xmark"></i> Cancelar';
+  btnCancel.className = 'btn btn-outline';
+  btnCancel.style.color = '#fff';
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:.75rem';
+  row.append(btnCapture, btnCancel);
+
+  overlay.append(video, row);
+  document.body.appendChild(overlay);
+
+  let stream = null;
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false })
+    .then((s) => {
+      stream = s;
+      video.srcObject = stream;
+    })
+    .catch((err) => {
+      overlay.remove();
+      window.dispatchEvent(new CustomEvent('app:toast', {
+        detail: { msg: 'No se pudo acceder a la cámara: ' + err.message, type: 'error' }
+      }));
+    });
+
+  function close() {
+    stream?.getTracks().forEach(t => t.stop());
+    overlay.remove();
   }
+
+  btnCancel.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  btnCapture.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      onCapture(file);
+      close();
+    }, 'image/jpeg', 0.88);
+  });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

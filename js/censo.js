@@ -14,16 +14,6 @@ function getSessionProjectId() {
   return id;
 }
 
-const COLOR_PALETTE = ['#A80081','#0077CC','#2E7D32','#E65100','#6A1B9A','#00838F','#AD1457'];
-function getSessionColor() {
-  let color = sessionStorage.getItem('censo_color');
-  if (!color) {
-    color = COLOR_PALETTE[Math.floor(Math.random() * COLOR_PALETTE.length)];
-    sessionStorage.setItem('censo_color', color);
-  }
-  return color;
-}
-
 export function renderCensoView() {
   return `
     <div class="view-header">
@@ -34,11 +24,15 @@ export function renderCensoView() {
 
         <div class="field-group">
           <label><i class="fa-solid fa-camera"></i> Fotografía de la mascota</label>
-          <div class="foto-upload-area" id="foto-drop">
-            <i class="fa-solid fa-camera fa-2x"></i>
-            <p>Toca para abrir la cámara o seleccionar foto</p>
-            <input type="file" id="censo-foto" accept="image/*" capture="environment" style="display:none" />
+          <div class="foto-btns-row">
+            <button type="button" class="btn btn-outline foto-btn-camara" id="btn-censo-abrir-camara">
+              <i class="fa-solid fa-camera"></i> Abrir cámara
+            </button>
+            <button type="button" class="btn btn-outline foto-btn-archivo" id="btn-censo-subir-archivo">
+              <i class="fa-solid fa-folder-open"></i> Subir archivo
+            </button>
           </div>
+          <input type="file" id="censo-foto-archivo" accept="image/*" style="display:none" />
           <div id="foto-preview-wrap" class="hidden" style="margin-top:.5rem;position:relative">
             <img id="foto-preview" alt="Vista previa"
               style="width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius-md);" />
@@ -72,6 +66,9 @@ export function renderCensoView() {
             <i class="fa-solid fa-location-crosshairs"></i>
             <span>Se capturará al enviar el formulario</span>
           </div>
+          <div id="censo-map-preview" class="hidden" style="margin-top:.6rem;border-radius:var(--radius-md);overflow:hidden;height:200px;border:1px solid var(--border-color)">
+            <div id="censo-leaflet-mini" style="height:100%;width:100%;"></div>
+          </div>
         </div>
 
         <div id="censo-error" class="alert alert-error hidden"></div>
@@ -88,6 +85,7 @@ export async function initCensoView() {
   setupPhotoInput();
   await loadSelects();
   setupForm();
+  previewGeolocation();
 }
 
 // ── Foto ──────────────────────────────────────────────────────────────────────
@@ -95,34 +93,88 @@ export async function initCensoView() {
 let _fotoBase64 = null;
 
 function setupPhotoInput() {
-  const drop  = document.getElementById('foto-drop');
-  const input = document.getElementById('censo-foto');
-  const rmBtn = document.getElementById('btn-remove-foto');
+  const inputArchivo = document.getElementById('censo-foto-archivo');
+  const rmBtn        = document.getElementById('btn-remove-foto');
+  const btnCamara    = document.getElementById('btn-censo-abrir-camara');
+  const btnArchivo   = document.getElementById('btn-censo-subir-archivo');
 
-  drop?.addEventListener('click', () => input?.click());
-  input?.addEventListener('change', () => {
-    if (input.files[0]) processPhoto(input.files[0]);
+  btnCamara?.addEventListener('click', () => {
+    openCameraChoiceModal((file) => compressAndPreview(file));
   });
+
+  btnArchivo?.addEventListener('click', () => {
+    inputArchivo.value = '';   // forzar re-trigger aunque sea el mismo archivo
+    inputArchivo?.click();
+  });
+
+  inputArchivo?.addEventListener('change', () => {
+    if (inputArchivo.files[0]) compressAndPreview(inputArchivo.files[0]);
+  });
+
   rmBtn?.addEventListener('click', clearPhoto);
 }
 
-function processPhoto(file) {
+function compressAndPreview(file) {
   const errEl    = document.getElementById('foto-error');
   const sizeInfo = document.getElementById('foto-size-info');
   errEl.classList.add('hidden');
+  sizeInfo.textContent = 'Comprimiendo imagen…';
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const base64 = e.target.result;
-    const raw = base64.split(',')[1] || '';
-    const kb = (raw.length * 0.75 / 1024).toFixed(1);
-    sizeInfo.textContent = `Tamaño: ${kb} KB`;
+  const MAX_PX      = 600;
+  const MAX_B64_KB  = 48;   // un poco por debajo del límite del servidor (50 KB)
 
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+
+  img.onload = () => {
+    URL.revokeObjectURL(objectUrl);
+
+    let { width, height } = img;
+    if (width > MAX_PX || height > MAX_PX) {
+      if (width >= height) {
+        height = Math.round((height * MAX_PX) / width);
+        width  = MAX_PX;
+      } else {
+        width  = Math.round((width * MAX_PX) / height);
+        height = MAX_PX;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+    // Bajar calidad iterativamente hasta cumplir el límite
+    let quality = 0.6;
+    let base64  = canvas.toDataURL('image/jpeg', quality);
+    let kb      = (base64.length * 0.75) / 1024;
+
+    while (kb > MAX_B64_KB && quality > 0.1) {
+      quality -= 0.05;
+      base64   = canvas.toDataURL('image/jpeg', quality);
+      kb       = (base64.length * 0.75) / 1024;
+    }
+
+    if (kb > MAX_B64_KB) {
+      errEl.textContent = 'La imagen es demasiado grande incluso después de comprimir. Usa una foto más pequeña.';
+      errEl.classList.remove('hidden');
+      sizeInfo.textContent = '';
+      return;
+    }
+
+    sizeInfo.textContent = `Tamaño: ${kb.toFixed(1)} KB (${width}×${height}px, calidad ${Math.round(quality * 100)}%)`;
     _fotoBase64 = base64;
     document.getElementById('foto-preview').src = base64;
     document.getElementById('foto-preview-wrap').classList.remove('hidden');
   };
-  reader.readAsDataURL(file);
+
+  img.onerror = () => {
+    errEl.textContent = 'No se pudo leer la imagen.';
+    errEl.classList.remove('hidden');
+  };
+
+  img.src = objectUrl;
 }
 
 function clearPhoto() {
@@ -130,8 +182,51 @@ function clearPhoto() {
   document.getElementById('foto-preview').src = '';
   document.getElementById('foto-preview-wrap').classList.add('hidden');
   document.getElementById('foto-size-info').textContent = '';
-  document.getElementById('censo-foto').value = '';
+  document.getElementById('censo-foto-archivo').value = '';
   document.getElementById('foto-error').classList.add('hidden');
+}
+
+// ── Mini-mapa de preview ───────────────────────────────────────────────────
+
+let _miniMap = null;
+let _miniMarker = null;
+
+function previewGeolocation() {
+  const geoStatus = document.getElementById('geo-status');
+  const mapWrap = document.getElementById('censo-map-preview');
+  if (!navigator.geolocation) return;
+
+  geoStatus.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Obteniendo ubicación…';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      geoStatus.innerHTML = `<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> <strong>${lat.toFixed(5)}, ${lon.toFixed(5)}</strong>`;
+
+      mapWrap.classList.remove('hidden');
+      setTimeout(() => {
+        if (_miniMap) { _miniMap.remove(); _miniMap = null; _miniMarker = null; }
+        _miniMap = L.map('censo-leaflet-mini', { zoomControl: true, scrollWheelZoom: false }).setView([lat, lon], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(_miniMap);
+        const icon = L.divIcon({
+          className: '',
+          html: '<div style="width:18px;height:18px;background:var(--primary,#A80081);border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        _miniMarker = L.marker([lat, lon], { icon }).addTo(_miniMap);
+        _miniMarker.bindPopup('Tu ubicación actual').openPopup();
+      }, 100);
+    },
+    () => {
+      geoStatus.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Activa el GPS para ver tu ubicación';
+    },
+    { timeout: 12000, maximumAge: 30000 }
+  );
 }
 
 // ── Selects ───────────────────────────────────────────────────────────────────
@@ -143,7 +238,7 @@ async function loadSelects() {
       api.get('/personas'),
     ]);
     fillSelect('censo-mascota', mascotas, m => ({ value: m.id, label: `${m.nombre} (${m.tipo})` }));
-    fillSelect('censo-dueno',   personas, p => ({ value: p.id, label: `${p.nombres} ${p.apellidos}` }));
+    fillSelect('censo-dueno', personas, p => ({ value: p.id, label: `${p.nombres} ${p.apellidos}` }));
   } catch (err) {
     showToast('No se pudo cargar mascotas o personas: ' + err.message, 'error');
   }
@@ -177,7 +272,7 @@ function setupForm() {
     }
 
     const idMascota = document.getElementById('censo-mascota').value;
-    const idDueno   = document.getElementById('censo-dueno').value;
+    const idDueno = document.getElementById('censo-dueno').value;
     if (!idMascota || !idDueno) {
       errDiv.textContent = 'Debes seleccionar la mascota y el dueño.';
       errDiv.classList.remove('hidden');
@@ -194,7 +289,11 @@ function setupForm() {
     let lat, lon;
     try {
       ({ lat, lon } = await getGeolocation());
-      geoStatus.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      geoStatus.innerHTML = `<i class="fa-solid fa-location-dot" style="color:var(--primary)"></i> <strong>${lat.toFixed(5)}, ${lon.toFixed(5)}</strong>`;
+      if (_miniMap && _miniMarker) {
+        _miniMarker.setLatLng([lat, lon]);
+        _miniMap.setView([lat, lon], 15);
+      }
     } catch {
       geoStatus.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Ubicación no disponible';
       errDiv.textContent = 'No se pudo obtener la ubicación GPS. Activa los permisos de localización e inténtalo de nuevo.';
@@ -211,20 +310,26 @@ function setupForm() {
       idMascota,
       idDueno,
       idProyecto: getSessionProjectId(),
-      color:      getSessionColor(),
+      color: '#A80081',
       lat,
       lon,
     };
 
     try {
       if (navigator.onLine) {
+        const bodySize = (JSON.stringify(dto).length / 1024).toFixed(1);
+        console.log('Body size KB:', bodySize);
         await api.post('/censos', dto);
         sucDiv.textContent = 'Censo registrado correctamente.';
         sucDiv.classList.remove('hidden');
         showToast('Censo registrado', 'success');
         form.reset();
         clearPhoto();
+        _fotoBase64 = null;
         geoStatus.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Se capturará al enviar el formulario';
+        document.getElementById('censo-map-preview').classList.add('hidden');
+        if (_miniMap) { _miniMap.remove(); _miniMap = null; _miniMarker = null; }
+        setTimeout(previewGeolocation, 500);
       } else {
         await enqueue('censos_queue', dto);
         sucDiv.textContent = 'Sin conexión — censo guardado localmente.';
@@ -252,6 +357,100 @@ function getGeolocation() {
   });
 }
 
+// ── Popup de elección de cámara (frontal / trasera) ────────────────────────
+
+function openCameraChoiceModal(onCapture) {
+  const overlay = document.createElement('div');
+  overlay.className = 'camera-choice-overlay';
+  overlay.innerHTML = `
+    <div class="camera-choice-box">
+      <div class="camera-choice-header">
+        <i class="fa-solid fa-camera"></i>
+        <span>Seleccionar cámara</span>
+        <button class="camera-choice-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="camera-choice-btns">
+        <button class="btn btn-outline camera-choice-btn" data-facing="environment">
+          <i class="fa-solid fa-camera"></i>
+          <span>Cámara trasera</span>
+        </button>
+        <button class="btn btn-outline camera-choice-btn" data-facing="user">
+          <i class="fa-solid fa-camera-rotate"></i>
+          <span>Cámara frontal</span>
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('.camera-choice-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  overlay.querySelectorAll('.camera-choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      close();
+      openCameraModal(onCapture, btn.dataset.facing);
+    });
+  });
+}
+
+// ── Cámara getUserMedia ────────────────────────────────────────────────────
+
+function openCameraModal(onCapture, facingMode = 'environment') {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:1rem';
+
+  const video = document.createElement('video');
+  video.autoplay = true;
+  video.playsInline = true;
+  video.style.cssText = 'max-width:100%;max-height:60vh;border-radius:8px;background:#000';
+
+  const btnCapture = document.createElement('button');
+  btnCapture.innerHTML = '<i class="fa-solid fa-camera"></i> Capturar foto';
+  btnCapture.className = 'btn btn-primary';
+
+  const btnCancel = document.createElement('button');
+  btnCancel.innerHTML = '<i class="fa-solid fa-xmark"></i> Cancelar';
+  btnCancel.className = 'btn btn-outline';
+  btnCancel.style.color = '#fff';
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:.75rem';
+  row.append(btnCapture, btnCancel);
+  overlay.append(video, row);
+  document.body.appendChild(overlay);
+
+  let stream = null;
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false })
+    .then((s) => { stream = s; video.srcObject = stream; })
+    .catch((err) => {
+      overlay.remove();
+      showToast('No se pudo acceder a la cámara: ' + err.message, 'error');
+    });
+
+  function close() {
+    stream?.getTracks().forEach(t => t.stop());
+    overlay.remove();
+  }
+
+  btnCancel.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  btnCapture.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      onCapture(file);
+      close();
+    }, 'image/jpeg', 0.88);
+  });
+}
+
 function esc(str) {
-  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

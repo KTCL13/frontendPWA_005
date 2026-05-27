@@ -1,7 +1,7 @@
 import { login, logout, isLoggedIn, getCurrentUser, requireAuth } from './auth.js';
 import { api } from './api.js';
 import { initSync } from './sync.js';
-import { initNotifications, subscribeToNotifications } from './notifications.js';
+import { initNotifications, subscribeToNotifications, unsubscribeFromNotifications, getNotificationStatus } from './notifications.js';
 import { renderPersonasView, initPersonasView } from './personas.js';
 import { renderMascotasView, initMascotasView } from './mascotas.js';
 import { renderCensoView, initCensoView } from './censo.js';
@@ -206,9 +206,14 @@ function renderInicio() {
       <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:.75rem">
         Recibe alertas cuando se registre un nuevo censo.
       </p>
-      <button class="btn btn-outline btn-sm" id="btn-subscribe-notif">
-        <i class="fa-solid fa-bell"></i> Suscribirse a notificaciones
-      </button>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" id="btn-subscribe-notif" style="flex:1;min-width:140px">
+          <i class="fa-solid fa-bell"></i> Activar notificaciones
+        </button>
+        <button class="btn btn-outline btn-sm hidden" id="btn-unsubscribe-notif" style="flex:1;min-width:140px;color:var(--danger,#d32f2f);border-color:var(--danger,#d32f2f)">
+          <i class="fa-solid fa-bell-slash"></i> Desactivar notificaciones
+        </button>
+      </div>
       <p id="notif-status" class="text-muted" style="margin-top:.5rem;font-size:.82rem"></p>
     </div>`;
 }
@@ -238,37 +243,60 @@ async function initInicio() {
     });
   } catch { /* stats not critical */ }
 
-  // notifications subscribe button
-  const btn = document.getElementById('btn-subscribe-notif');
-  const status = document.getElementById('notif-status');
-  if (!btn) return;
+  // notifications toggle buttons
+  const btnSub   = document.getElementById('btn-subscribe-notif');
+  const btnUnsub = document.getElementById('btn-unsubscribe-notif');
+  const status   = document.getElementById('notif-status');
+  if (!btnSub) return;
 
   if (!('PushManager' in window)) {
-    btn.disabled = true;
+    btnSub.disabled = true;
     status.textContent = 'Este navegador no soporta notificaciones push.';
     return;
   }
 
-  const reg = await navigator.serviceWorker.ready.catch(() => null);
-  const existing = await reg?.pushManager.getSubscription().catch(() => null);
-  if (existing) {
-    btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Ya estás suscrito';
-    btn.disabled = true;
-    status.textContent = 'Recibirás notificaciones de nuevos censos.';
-    return;
+  async function refreshNotifUI() {
+    const st = await getNotificationStatus();
+    if (st === 'subscribed') {
+      btnSub.classList.add('hidden');
+      btnUnsub.classList.remove('hidden');
+      status.textContent = 'Notificaciones activas. Recibirás alertas de nuevos censos.';
+    } else {
+      btnSub.classList.remove('hidden');
+      btnUnsub.classList.add('hidden');
+      status.textContent = 'Notificaciones desactivadas.';
+    }
   }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Suscribiendo…';
+  await refreshNotifUI();
+
+  btnSub.addEventListener('click', async () => {
+    btnSub.disabled = true;
+    btnSub.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Activando…';
     try {
       await subscribeToNotifications();
-      btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Ya estás suscrito';
-      status.textContent = 'Recibirás notificaciones de nuevos censos.';
+      showToast('Notificaciones activadas', 'success');
     } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-bell"></i> Suscribirse a notificaciones';
       status.textContent = 'Error: ' + err.message;
+    } finally {
+      btnSub.disabled = false;
+      btnSub.innerHTML = '<i class="fa-solid fa-bell"></i> Activar notificaciones';
+      await refreshNotifUI();
+    }
+  });
+
+  btnUnsub.addEventListener('click', async () => {
+    btnUnsub.disabled = true;
+    btnUnsub.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Desactivando…';
+    try {
+      await unsubscribeFromNotifications();
+      showToast('Notificaciones desactivadas', 'info');
+    } catch (err) {
+      status.textContent = 'Error: ' + err.message;
+    } finally {
+      btnUnsub.disabled = false;
+      btnUnsub.innerHTML = '<i class="fa-solid fa-bell-slash"></i> Desactivar notificaciones';
+      await refreshNotifUI();
     }
   });
 }
@@ -303,13 +331,16 @@ function initLogoutButtons() {
   document.getElementById('btn-logout-sidebar')?.addEventListener('click', logout);
 }
 
-// ── Sidebar toggle (mobile) ──────────────────────────────────────────────────
+// ── Sidebar toggle (desktop only — mobile uses bottom nav) ───────────────────
 function initSidebarToggle() {
+  // On mobile the sidebar is hidden via CSS (display:none).
+  // The hamburger button is also hidden, so this handler is a no-op on mobile.
   const btn = document.getElementById('btn-menu-toggle');
   const sidebar = document.getElementById('sidebar');
-  btn?.addEventListener('click', () => sidebar?.classList.toggle('sidebar--open'));
-  document.getElementById('main-content')?.addEventListener('click', () => {
-    sidebar?.classList.remove('sidebar--open');
+  btn?.addEventListener('click', () => {
+    if (window.innerWidth >= 768) {
+      sidebar?.classList.toggle('sidebar--open');
+    }
   });
 }
 

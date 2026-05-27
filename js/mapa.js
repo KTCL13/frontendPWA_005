@@ -8,13 +8,13 @@ let mapInstance = null;
 
 export function renderMapaView() {
   return `
-    <div class="view-header">
+    <div class="view-header" style="position:relative;z-index:2;">
       <h2><i class="fa-solid fa-map-location-dot"></i> Mapa de censos</h2>
       <button class="btn btn-primary" id="btn-reload-map">
         <i class="fa-solid fa-rotate"></i> Actualizar
       </button>
     </div>
-    <div id="map-wrapper" class="map-wrapper">
+    <div id="map-wrapper" class="map-wrapper" style="isolation:isolate;">
       <div id="leaflet-map" style="height:100%;width:100%;"></div>
     </div>`;
 }
@@ -45,7 +45,7 @@ async function loadCensos() {
   });
 
   try {
-    const censos = await api.get('/censos');
+    const censos = (await api.get('/censos')).slice().reverse();
     let valid = 0;
 
     for (const c of censos) {

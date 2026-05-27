@@ -12,7 +12,6 @@ function urlBase64ToUint8Array(base64String) {
 
 async function getOrCreateSubscription() {
   const registration = await navigator.serviceWorker.ready;
-
   const existing = await registration.pushManager.getSubscription();
   if (existing) return existing;
 
@@ -37,19 +36,44 @@ export async function subscribeToNotifications() {
 
   const subscription = await getOrCreateSubscription();
   await api.post('/push/subscriptions', subscription.toJSON());
+  localStorage.setItem('push_subscribed', '1');
   return subscription;
+}
+
+export async function unsubscribeFromNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Este navegador no soporta notificaciones push');
+  }
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return;
+  await subscription.unsubscribe();
+  localStorage.removeItem('push_subscribed');
+}
+
+export async function getNotificationStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
+  // Brave puede bloquear pushManager.getSubscription() aunque haya suscripción activa.
+  // Cruzamos con Notification.permission como señal de respaldo.
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return 'subscribed';
+    // Fallback: si el permiso está concedido y hay un flag local, asumir suscrito
+    if (Notification.permission === 'granted' && localStorage.getItem('push_subscribed') === '1') {
+      return 'subscribed';
+    }
+    return 'unsubscribed';
+  } catch {
+    if (Notification.permission === 'granted' && localStorage.getItem('push_subscribed') === '1') {
+      return 'subscribed';
+    }
+    return 'unsubscribed';
+  }
 }
 
 export async function initNotifications() {
   if (!isLoggedIn()) return;
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    const existing = await registration.pushManager.getSubscription();
-    if (existing) return; // already subscribed, re-send to keep server in sync
-    // Don't auto-request permission — let the user click the button
-  } catch (err) {
-    console.warn('Push init failed:', err.message);
-  }
+  // No auto-suscribir — el usuario decide desde el botón en inicio
 }

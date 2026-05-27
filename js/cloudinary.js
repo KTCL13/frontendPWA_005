@@ -1,6 +1,6 @@
-// Rellena estos dos valores con los de tu cuenta Cloudinary
-const CLOUD_NAME = 'dhfip9f1d';
-const UPLOAD_PRESET = 'censo_mascotas_pwa';
+// Cloud name correcto según el endpoint indicado
+const CLOUD_NAME = 'dltdoqcwz';
+const UPLOAD_PRESET = 'pwa_005_uploads';
 
 /**
  * Sube un File/Blob a Cloudinary y devuelve la URL segura.
@@ -21,7 +21,6 @@ export async function uploadToCloudinary(file) {
 
   if (!res.ok) {
     const msg = data?.error?.message || `Error ${res.status}`;
-    // El error más común: el preset no es "Unsigned"
     if (msg.toLowerCase().includes('upload preset')) {
       throw new Error(
         `Cloudinary: el preset "${UPLOAD_PRESET}" debe estar configurado como Unsigned. ` +
