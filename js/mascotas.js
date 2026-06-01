@@ -2,7 +2,7 @@ import { api } from "./api.js";
 import { enqueue } from "./db.js";
 import { uploadToCloudinary } from "./cloudinary.js";
 import { insertTimestampAfterTitle, onDataUpdate } from "./panel-utils.js";
-import { saveTimestamp } from "./cache-manager.js";
+import { saveTimestamp, getFormattedTimestamp } from "./cache-manager.js";
 
 function showToast(msg, type) {
   window.dispatchEvent(new CustomEvent("app:toast", { detail: { msg, type } }));
@@ -113,8 +113,12 @@ async function loadMascotas() {
   if (!grid) return;
   try {
     const mascotas = await api.get("/mascotas");
-    // Guardar timestamp de la actualización
-    await saveTimestamp("mascotas-list", new Date());
+    // Solo actualizar timestamp si hay conexión a internet (datos de red, no de caché)
+    if (navigator.onLine) {
+      await saveTimestamp("mascotas-list", new Date());
+      // Actualizar el elemento de timestamp en el DOM directamente
+      updateTimestampDisplay();
+    }
     if (!mascotas.length) {
       grid.innerHTML =
         '<p class="empty-state"><i class="fa-solid fa-paw"></i> No hay mascotas registradas aún.</p>';
@@ -275,6 +279,18 @@ async function handleSubmit(e) {
 function closeModal() {
   document.getElementById("modal-mascota")?.classList.add("hidden");
   document.getElementById("mascota-error")?.classList.add("hidden");
+}
+
+// ── Actualizar timestamp en el DOM ─────────────────────────────────────────
+
+async function updateTimestampDisplay() {
+  const timestampValue = document.querySelector(
+    ".panel-timestamp-container .timestamp-value",
+  );
+  if (timestampValue) {
+    const newTimestamp = await getFormattedTimestamp("mascotas-list");
+    timestampValue.textContent = newTimestamp;
+  }
 }
 
 // ── Popup de elección de cámara (frontal / trasera) ────────────────────────
