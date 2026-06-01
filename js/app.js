@@ -440,6 +440,21 @@ async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
     await navigator.serviceWorker.register("/sw.js");
+
+    // Escuchar mensajes del Service Worker (actualizaciones de caché)
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data.type === "data-updated") {
+        // Disparar evento en la ventana para que onDataUpdate() escuche
+        window.dispatchEvent(
+          new CustomEvent("cache-updated", {
+            detail: {
+              url: event.data.url,
+              timestamp: event.data.timestamp,
+            },
+          }),
+        );
+      }
+    });
   } catch (err) {
     console.warn("SW registration failed:", err);
   }
