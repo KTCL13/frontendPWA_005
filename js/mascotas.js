@@ -1,9 +1,11 @@
-import { api } from './api.js';
-import { enqueue } from './db.js';
-import { uploadToCloudinary } from './cloudinary.js';
+import { api } from "./api.js";
+import { enqueue } from "./db.js";
+import { uploadToCloudinary } from "./cloudinary.js";
+import { insertTimestampAfterTitle, onDataUpdate } from "./panel-utils.js";
+import { saveTimestamp } from "./cache-manager.js";
 
 function showToast(msg, type) {
-  window.dispatchEvent(new CustomEvent('app:toast', { detail: { msg, type } }));
+  window.dispatchEvent(new CustomEvent("app:toast", { detail: { msg, type } }));
 }
 
 export function renderMascotasView() {
@@ -91,24 +93,41 @@ export function renderMascotasView() {
 }
 
 export async function initMascotasView() {
+  // Insertar timestamp después del título
+  const titleElement = document.querySelector(".view-header h2");
+  if (titleElement) {
+    await insertTimestampAfterTitle(titleElement, "mascotas-list");
+  }
+
+  // Escuchar actualizaciones de datos (online/offline)
+  onDataUpdate("mascotas-list", async () => {
+    await loadMascotas();
+  });
+
   await loadMascotas();
   setupModal();
 }
 
 async function loadMascotas() {
-  const grid = document.getElementById('mascotas-grid');
+  const grid = document.getElementById("mascotas-grid");
   if (!grid) return;
   try {
-    const mascotas = await api.get('/mascotas');
+    const mascotas = await api.get("/mascotas");
+    // Guardar timestamp de la actualización
+    await saveTimestamp("mascotas-list", new Date());
     if (!mascotas.length) {
-      grid.innerHTML = '<p class="empty-state"><i class="fa-solid fa-paw"></i> No hay mascotas registradas aún.</p>';
+      grid.innerHTML =
+        '<p class="empty-state"><i class="fa-solid fa-paw"></i> No hay mascotas registradas aún.</p>';
       return;
     }
-    grid.innerHTML = mascotas.map(m => `
+    grid.innerHTML = mascotas
+      .map(
+        (m) => `
       <div class="mascota-card">
-        ${m.fotografia
-          ? `<img src="${esc(m.fotografia)}" alt="${esc(m.nombre)}" class="mascota-card-img" onerror="this.style.display='none'" />`
-          : `<div class="mascota-card-img" style="display:flex;align-items:center;justify-content:center">${tipoIcon(m.tipo, '3rem')}</div>`
+        ${
+          m.fotografia
+            ? `<img src="${esc(m.fotografia)}" alt="${esc(m.nombre)}" class="mascota-card-img" onerror="this.style.display='none'" />`
+            : `<div class="mascota-card-img" style="display:flex;align-items:center;justify-content:center">${tipoIcon(m.tipo, "3rem")}</div>`
         }
         <div class="mascota-card-body">
           <p class="mascota-card-name">${esc(m.nombre)}</p>
@@ -116,12 +135,14 @@ async function loadMascotas() {
             <span class="badge badge-primary">${esc(m.tipo)}</span>
           </p>
           <p class="mascota-card-meta" style="margin-top:.35rem">
-            <i class="fa-solid fa-calendar-days"></i> ${esc(m.edad)} año${m.edad !== 1 ? 's' : ''}
+            <i class="fa-solid fa-calendar-days"></i> ${esc(m.edad)} año${m.edad !== 1 ? "s" : ""}
             &nbsp;·&nbsp;
             <i class="fa-solid fa-venus-mars"></i> ${esc(m.genero)}
           </p>
         </div>
-      </div>`).join('');
+      </div>`,
+      )
+      .join("");
   } catch (err) {
     grid.innerHTML = `<p class="alert alert-error">${esc(err.message)}</p>`;
   }
@@ -132,114 +153,119 @@ async function loadMascotas() {
 let _currentFotoFile = null;
 
 function setupModal() {
-  const modal        = document.getElementById('modal-mascota');
-  const btnOpen      = document.getElementById('btn-nueva-mascota');
-  const btnClose     = document.getElementById('btn-close-modal');
-  const backdrop     = modal?.querySelector('.modal-backdrop');
-  const form         = document.getElementById('form-mascota');
-  const fotoArchivo  = document.getElementById('m-foto-archivo');
-  const btnCamara    = document.getElementById('btn-m-abrir-camara');
-  const btnArchivo   = document.getElementById('btn-m-subir-archivo');
-  const rmFoto       = document.getElementById('btn-m-remove-foto');
+  const modal = document.getElementById("modal-mascota");
+  const btnOpen = document.getElementById("btn-nueva-mascota");
+  const btnClose = document.getElementById("btn-close-modal");
+  const backdrop = modal?.querySelector(".modal-backdrop");
+  const form = document.getElementById("form-mascota");
+  const fotoArchivo = document.getElementById("m-foto-archivo");
+  const btnCamara = document.getElementById("btn-m-abrir-camara");
+  const btnArchivo = document.getElementById("btn-m-subir-archivo");
+  const rmFoto = document.getElementById("btn-m-remove-foto");
 
   function onCapture(file) {
     _currentFotoFile = file;
     const url = URL.createObjectURL(file);
-    document.getElementById('m-foto-preview').src = url;
-    document.getElementById('m-foto-preview-wrap').classList.remove('hidden');
+    document.getElementById("m-foto-preview").src = url;
+    document.getElementById("m-foto-preview-wrap").classList.remove("hidden");
   }
 
-  btnOpen?.addEventListener('click', () => {
+  btnOpen?.addEventListener("click", () => {
     _currentFotoFile = null;
     form?.reset();
     clearMFoto();
-    document.getElementById('modal-mascota-title').innerHTML = '<i class="fa-solid fa-paw"></i> Registrar mascota';
-    modal.classList.remove('hidden');
+    document.getElementById("modal-mascota-title").innerHTML =
+      '<i class="fa-solid fa-paw"></i> Registrar mascota';
+    modal.classList.remove("hidden");
   });
-  btnClose?.addEventListener('click', closeModal);
-  backdrop?.addEventListener('click', closeModal);
+  btnClose?.addEventListener("click", closeModal);
+  backdrop?.addEventListener("click", closeModal);
 
   // Botón "Abrir cámara" → muestra popup de elección frontal/trasera
-  btnCamara?.addEventListener('click', () => {
+  btnCamara?.addEventListener("click", () => {
     openCameraChoiceModal(onCapture);
   });
 
   // Botón "Subir archivo" → selector de archivo
-  btnArchivo?.addEventListener('click', () => {
+  btnArchivo?.addEventListener("click", () => {
     fotoArchivo?.click();
   });
 
-  fotoArchivo?.addEventListener('change', () => {
+  fotoArchivo?.addEventListener("change", () => {
     if (fotoArchivo.files[0]) {
       _currentFotoFile = fotoArchivo.files[0];
       const url = URL.createObjectURL(_currentFotoFile);
-      document.getElementById('m-foto-preview').src = url;
-      document.getElementById('m-foto-preview-wrap').classList.remove('hidden');
+      document.getElementById("m-foto-preview").src = url;
+      document.getElementById("m-foto-preview-wrap").classList.remove("hidden");
     }
   });
 
-  rmFoto?.addEventListener('click', () => { _currentFotoFile = null; clearMFoto(); });
+  rmFoto?.addEventListener("click", () => {
+    _currentFotoFile = null;
+    clearMFoto();
+  });
 
-  form?.addEventListener('submit', handleSubmit);
+  form?.addEventListener("submit", handleSubmit);
 }
 
 function clearMFoto() {
-  document.getElementById('m-foto-preview-wrap')?.classList.add('hidden');
-  document.getElementById('m-foto-status').textContent = '';
-  const a = document.getElementById('m-foto-archivo');
-  if (a) a.value = '';
+  document.getElementById("m-foto-preview-wrap")?.classList.add("hidden");
+  document.getElementById("m-foto-status").textContent = "";
+  const a = document.getElementById("m-foto-archivo");
+  if (a) a.value = "";
 }
 
 async function handleSubmit(e) {
   e.preventDefault();
-  const errDiv   = document.getElementById('mascota-error');
-  const statusEl = document.getElementById('m-foto-status');
-  errDiv.classList.add('hidden');
-  const btn = document.getElementById('btn-submit-mascota');
+  const errDiv = document.getElementById("mascota-error");
+  const statusEl = document.getElementById("m-foto-status");
+  errDiv.classList.add("hidden");
+  const btn = document.getElementById("btn-submit-mascota");
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';
 
   try {
     let fotografia;
     if (_currentFotoFile) {
-      statusEl.textContent = 'Subiendo foto a Cloudinary…';
+      statusEl.textContent = "Subiendo foto a Cloudinary…";
       try {
         fotografia = await uploadToCloudinary(_currentFotoFile);
-        statusEl.textContent = '';
+        statusEl.textContent = "";
       } catch (uploadErr) {
-        statusEl.textContent = '';
+        statusEl.textContent = "";
         errDiv.textContent = uploadErr.message;
-        errDiv.classList.remove('hidden');
+        errDiv.classList.remove("hidden");
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
+        btn.innerHTML =
+          '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
         return;
       }
     }
 
     const dto = {
-      nombre: document.getElementById('m-nombre').value.trim(),
-      tipo:   document.getElementById('m-tipo').value,
-      genero: document.getElementById('m-genero').value,
-      edad:   Number(document.getElementById('m-edad').value),
+      nombre: document.getElementById("m-nombre").value.trim(),
+      tipo: document.getElementById("m-tipo").value,
+      genero: document.getElementById("m-genero").value,
+      edad: Number(document.getElementById("m-edad").value),
       ...(fotografia && { fotografia }),
     };
 
     if (navigator.onLine) {
-      await api.post('/mascotas', dto);
-      showToast('Mascota registrada', 'success');
+      await api.post("/mascotas", dto);
+      showToast("Mascota registrada", "success");
     } else {
-      await enqueue('mascotas_queue', dto);
-      showToast('Sin conexión — guardado localmente', 'warning');
+      await enqueue("mascotas_queue", dto);
+      showToast("Sin conexión — guardado localmente", "warning");
     }
 
     closeModal();
-    document.getElementById('form-mascota').reset();
+    document.getElementById("form-mascota").reset();
     clearMFoto();
     _currentFotoFile = null;
     await loadMascotas();
   } catch (err) {
     errDiv.textContent = err.message;
-    errDiv.classList.remove('hidden');
+    errDiv.classList.remove("hidden");
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
@@ -247,15 +273,15 @@ async function handleSubmit(e) {
 }
 
 function closeModal() {
-  document.getElementById('modal-mascota')?.classList.add('hidden');
-  document.getElementById('mascota-error')?.classList.add('hidden');
+  document.getElementById("modal-mascota")?.classList.add("hidden");
+  document.getElementById("mascota-error")?.classList.add("hidden");
 }
 
 // ── Popup de elección de cámara (frontal / trasera) ────────────────────────
 
 function openCameraChoiceModal(onCapture) {
-  const overlay = document.createElement('div');
-  overlay.className = 'camera-choice-overlay';
+  const overlay = document.createElement("div");
+  overlay.className = "camera-choice-overlay";
   overlay.innerHTML = `
     <div class="camera-choice-box">
       <div class="camera-choice-header">
@@ -278,11 +304,15 @@ function openCameraChoiceModal(onCapture) {
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
-  overlay.querySelector('.camera-choice-close').addEventListener('click', close);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay
+    .querySelector(".camera-choice-close")
+    .addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
 
-  overlay.querySelectorAll('.camera-choice-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+  overlay.querySelectorAll(".camera-choice-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
       close();
       openCameraModal(onCapture, btn.dataset.facing);
     });
@@ -291,26 +321,28 @@ function openCameraChoiceModal(onCapture) {
 
 // ── Cámara getUserMedia ────────────────────────────────────────────────────
 
-function openCameraModal(onCapture, facingMode = 'environment') {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:1rem';
+function openCameraModal(onCapture, facingMode = "environment") {
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:1rem";
 
-  const video = document.createElement('video');
+  const video = document.createElement("video");
   video.autoplay = true;
   video.playsInline = true;
-  video.style.cssText = 'max-width:100%;max-height:60vh;border-radius:8px;background:#000';
+  video.style.cssText =
+    "max-width:100%;max-height:60vh;border-radius:8px;background:#000";
 
-  const btnCapture = document.createElement('button');
+  const btnCapture = document.createElement("button");
   btnCapture.innerHTML = '<i class="fa-solid fa-camera"></i> Capturar foto';
-  btnCapture.className = 'btn btn-primary';
+  btnCapture.className = "btn btn-primary";
 
-  const btnCancel = document.createElement('button');
+  const btnCancel = document.createElement("button");
   btnCancel.innerHTML = '<i class="fa-solid fa-xmark"></i> Cancelar';
-  btnCancel.className = 'btn btn-outline';
-  btnCancel.style.color = '#fff';
+  btnCancel.className = "btn btn-outline";
+  btnCancel.style.color = "#fff";
 
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:.75rem';
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:.75rem";
   row.append(btnCapture, btnCancel);
 
   overlay.append(video, row);
@@ -318,51 +350,69 @@ function openCameraModal(onCapture, facingMode = 'environment') {
 
   let stream = null;
 
-  navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false })
+  navigator.mediaDevices
+    .getUserMedia({ video: { facingMode }, audio: false })
     .then((s) => {
       stream = s;
       video.srcObject = stream;
     })
     .catch((err) => {
       overlay.remove();
-      window.dispatchEvent(new CustomEvent('app:toast', {
-        detail: { msg: 'No se pudo acceder a la cámara: ' + err.message, type: 'error' }
-      }));
+      window.dispatchEvent(
+        new CustomEvent("app:toast", {
+          detail: {
+            msg: "No se pudo acceder a la cámara: " + err.message,
+            type: "error",
+          },
+        }),
+      );
     });
 
   function close() {
-    stream?.getTracks().forEach(t => t.stop());
+    stream?.getTracks().forEach((t) => t.stop());
     overlay.remove();
   }
 
-  btnCancel.addEventListener('click', close);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  btnCancel.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
 
-  btnCapture.addEventListener('click', () => {
-    const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth;
+  btnCapture.addEventListener("click", () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      onCapture(file);
-      close();
-    }, 'image/jpeg', 0.88);
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        const file = new File([blob], `foto_${Date.now()}.jpg`, {
+          type: "image/jpeg",
+        });
+        onCapture(file);
+        close();
+      },
+      "image/jpeg",
+      0.88,
+    );
   });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function tipoIcon(tipo, size = '1.4rem') {
+function tipoIcon(tipo, size = "1.4rem") {
   const icons = {
-    PERRO:  'fa-dog',
-    GATO:   'fa-cat',
-    PAJARO: 'fa-feather',
+    PERRO: "fa-dog",
+    GATO: "fa-cat",
+    PAJARO: "fa-feather",
   };
-  const cls = icons[tipo] || 'fa-paw';
+  const cls = icons[tipo] || "fa-paw";
   return `<i class="fa-solid ${cls}" style="font-size:${size};color:var(--primary-border)"></i>`;
 }
 
 function esc(str) {
-  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
