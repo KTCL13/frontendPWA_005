@@ -1,16 +1,9 @@
-/**
- * Cache Manager - Gestiona timestamps y datos cacheados
- */
-
 const DB_NAME = "censoDB";
 const STORE_NAME = "timestamps";
 const TIMESTAMP_KEY = "last_update_";
 
 let db = null;
 
-/**
- * Inicializar IndexedDB
- */
 export async function initDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -30,11 +23,6 @@ export async function initDB() {
   });
 }
 
-/**
- * Guardar timestamp de última actualización
- * @param {string} cacheKey - Clave identificadora del cache
- * @param {Date} date - Fecha de actualización
- */
 export async function saveTimestamp(cacheKey, date = new Date()) {
   if (!db) await initDB();
 
@@ -49,11 +37,6 @@ export async function saveTimestamp(cacheKey, date = new Date()) {
   });
 }
 
-/**
- * Obtener timestamp de última actualización
- * @param {string} cacheKey - Clave identificadora del cache
- * @returns {Date|null}
- */
 export async function getTimestamp(cacheKey) {
   if (!db) await initDB();
 
@@ -71,12 +54,6 @@ export async function getTimestamp(cacheKey) {
   });
 }
 
-/**
- * Formatear timestamp a formato legible
- * DD/MM/YYYY HH:MM:SS
- * @param {Date} date
- * @returns {string}
- */
 export function formatTimestamp(date) {
   if (!date) return "No sincronizado";
 
@@ -91,19 +68,11 @@ export function formatTimestamp(date) {
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
-/**
- * Obtener timestamp formateado
- * @param {string} cacheKey
- * @returns {Promise<string>}
- */
 export async function getFormattedTimestamp(cacheKey) {
   const timestamp = await getTimestamp(cacheKey);
   return formatTimestamp(timestamp);
 }
 
-/**
- * Limpiar todos los timestamps
- */
 export async function clearAllTimestamps() {
   if (!db) await initDB();
 

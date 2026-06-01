@@ -301,7 +301,7 @@ async function initInicio() {
         </a>`;
     });
   } catch (err) {
-    // Si estamos offline pero autenticados, mostrar mensaje amigable
+    // Si estamos offline pero autenticados
     if (isOfflineButAuthenticated()) {
       showToast(
         "Modo offline - algunos datos pueden no estar disponibles",
