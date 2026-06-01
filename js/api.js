@@ -1,31 +1,37 @@
 const BASE_URL = "https://elprofehugo.online/api/v1";
 
+function cleanUrl(path) {
+  return `${BASE_URL}${path}`.split("?")[0];
+}
+
 export async function apiFetch(method, path, body = null) {
   const token = localStorage.getItem("jwt_token");
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let url = `${BASE_URL}${path}`;
+  if (method === "GET") {
+    const separator = path.includes("?") ? "&" : "?";
+    url += `${separator}_t=${Date.now()}`;
+  }
 
   const options = { method, headers };
   if (body !== null) options.body = JSON.stringify(body);
 
   let response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, options);
+    response = await fetch(url, options);
   } catch {
-    // Cuando no hay conexión, intentar usar cache para GETs
     if (method === "GET" && typeof caches !== "undefined") {
       try {
-        const cached = await caches.match(`${BASE_URL}${path}`);
+        const cached = await caches.match(cleanUrl(path));
         if (cached) {
           return await cached.json();
         }
       } catch {}
     }
-    // Si no hay cache y no hay conexión, retornar datos vacíos para funcionalidad offline
     if (method === "GET" && !navigator.onLine) {
-      return Array.isArray([])
-        ? []
-        : { data: [], message: "Datos en caché no disponibles" };
+      return [];
     }
     throw new Error("Sin conexión al servidor");
   }
@@ -38,14 +44,13 @@ export async function apiFetch(method, path, body = null) {
     throw new Error("Sesión expirada. Por favor inicia sesión de nuevo.");
   }
 
-  // Si el status es 503 (offline pero autenticado), intentar cache
   if (
     response.status === 503 &&
     method === "GET" &&
     typeof caches !== "undefined"
   ) {
     try {
-      const cached = await caches.match(`${BASE_URL}${path}`);
+      const cached = await caches.match(cleanUrl(path));
       if (cached) {
         return await cached.json();
       }

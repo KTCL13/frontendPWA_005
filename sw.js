@@ -31,15 +31,12 @@ self.addEventListener("install", (event) => {
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(STATIC_ASSETS))
       .then(() => {
-        // Intentar cachear CDNs importantes (Font Awesome, Leaflet)
-        // Pero permitir que fallen sin romper la instalación
         return caches.open(CDN_CACHE).then((cache) => {
           const cdnAssets = [
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css",
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
           ];
-          // Usar Promise.allSettled para no fallar si alguno falla
           return Promise.allSettled(
             cdnAssets.map((url) =>
               fetch(url)
@@ -48,9 +45,7 @@ self.addEventListener("install", (event) => {
                     return cache.put(url, response.clone());
                   }
                 })
-                .catch(() => {
-                  // Ignorar errores de red durante install
-                }),
+                .catch(() => {}),
             ),
           );
         });
@@ -78,245 +73,70 @@ self.addEventListener("activate", (event) => {
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
-
-// Función para limpiar cachés relacionados cuando hay cambios
-async function invalidateRelatedCache(url) {
-  // Solo limpiar caché si hay conexión disponible
-  // Si no hay conexión, es mejor mantener datos stale que no tener nada
-  if (!navigator.onLine || typeof caches === "undefined") {
-    return;
-  }
-
-  const cache = await caches.open(DATA_CACHE);
-  const allRequests = await cache.keys();
-
-  // Limpiar cachés del mismo recurso base
-  const urlObj = new URL(url);
-  const basePath = urlObj.pathname.split("/").slice(0, -1).join("/");
-
-  for (const req of allRequests) {
-    const reqUrl = new URL(req.url);
-    // Limpiar GET del mismo recurso y de lista general
-    if (
-      reqUrl.pathname === urlObj.pathname ||
-      reqUrl.pathname === basePath ||
-      reqUrl.pathname.startsWith(basePath + "/")
-    ) {
-      await cache.delete(req);
-    }
-  }
-}
-
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // cache-first para GETs, network-first para POST/PATCH/DELETE
+  // API calls: network-first, cache fallback, update cache
   if (url.pathname.startsWith("/api/")) {
-    // Para operaciones que modifican datos (POST, PATCH, DELETE), usar network-first
-    if (request.method !== "GET") {
-      event.respondWith(
-        fetch(request)
-          .then((response) => {
-            // Si la operación fue exitosa, intentar actualizar datos relacionados
-            if (response.ok) {
-              // Intenta GET automático para refrescar datos relacionados
-              const listUrl = new URL(request.url);
-              listUrl.pathname = listUrl.pathname
-                .split("/")
-                .slice(0, -1)
-                .join("/");
-
-              fetch(listUrl.toString())
-                .then((getResponse) => {
-                  if (getResponse.ok) {
-                    const clone = getResponse.clone();
-                    caches.open(DATA_CACHE).then((cache) => {
-                      // Primero limpia el caché viejo
-                      cache.keys().then((keys) => {
-                        keys.forEach((req) => {
-                          const reqUrl = new URL(req.url);
-                          // Solo limpiar GET del recurso relacionado
-                          if (
-                            reqUrl.pathname === listUrl.pathname ||
-                            reqUrl.pathname.startsWith(listUrl.pathname + "/")
-                          ) {
-                            cache.delete(req);
-                          }
-                        });
-                      });
-                      // Luego cachea los nuevos datos
-                      cache.put(listUrl.toString(), clone);
-                      saveTimestamp(listUrl.toString(), new Date());
-                      
-                      // Notificar al cliente que hay datos nuevos
-                      self.clients.matchAll().then((clients) => {
-                        clients.forEach((client) =>
-                          client.postMessage({
-                            type: "data-updated",
-                            url: listUrl.toString(),
-                            timestamp: new Date().toISOString(),
-                          }),
-                        );
-                      });
-                    });
-                  }
-                })
-                .catch(() => {
-                  // GET falló, no hacer nada - mantener caché viejo
-                });
-            }
-            return response;
-          })
-          .catch((error) => {
-            // Sin conexión en operación de escritura
-            return new Response(
-              JSON.stringify({
-                error:
-                  "Error de red - operación de escritura requiere conexión",
-              }),
-              {
-                status: 503,
-                headers: { "Content-Type": "application/json" },
-              },
-            );
-          }),
-      );
-      return;
-    }
-
-    // Para GETs: cache-first
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        // Si hay cache, devolverlo inmediatamente y actualizar en background
-        if (cached) {
-          // Intentar actualizar en background
-          fetch(request)
-            .then((response) => {
-              if (response.ok && response.type === "basic") {
-                const clone = response.clone();
-                caches.open(DATA_CACHE).then((cache) => {
-                  cache.put(request, clone);
-                  // Guardar timestamp
-                  clone
-                    .json()
-                    .then((data) => {
-                      saveTimestamp(request.url, new Date());
-                      // Notificar al cliente que hay datos nuevos
-                      self.clients.matchAll().then((clients) => {
-                        clients.forEach((client) =>
-                          client.postMessage({
-                            type: "data-updated",
-                            url: request.url,
-                            timestamp: new Date().toISOString(),
-                          }),
-                        );
-                      });
-                    })
-                    .catch(() => {});
-                });
-              }
-            })
-            .catch(() => {
-              // Sin conexión en actualización de background - no importa, ya tenemos cache
-            });
-
-          return cached;
-        }
-
-        // No hay cache, intentar desde la red
-        return fetch(request)
-          .then((response) => {
-            if (
-              response.ok &&
-              (response.type === "basic" || response.type === "cors")
-            ) {
-              const clone = response.clone();
-              caches.open(DATA_CACHE).then((cache) => {
-                cache.put(request, clone);
-                // Guardar timestamp
-                clone
-                  .json()
-                  .then((data) => {
-                    saveTimestamp(request.url, new Date());
-                    self.clients
-                      .matchAll()
-                      .then((clients) => {
-                        clients.forEach((client) =>
-                          client.postMessage({
-                            type: "data-updated",
-                            url: request.url,
-                            timestamp: new Date().toISOString(),
-                          }),
-                        );
-                      })
-                      .catch(() => {});
-                  })
-                  .catch(() => {});
-              });
-            }
-            return response;
-          })
-          .catch(() => {
-            // Sin conexión y no hay cache - devolver array vacío con nota
-            // Esto permite que la app siga funcionando pero notifica que está offline
-            return new Response(JSON.stringify([]), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            });
-          });
-      }),
-    );
-    return;
-  }
-
-  // Network-first with cache fallback
-  if (url.hostname !== self.location.hostname) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (
-            response.ok &&
-            (response.type === "basic" || response.type === "cors")
-          ) {
+          if (response.ok) {
             const clone = response.clone();
-            caches.open(CDN_CACHE).then((cache) => cache.put(request, clone));
+            const cleanKey = url.origin + url.pathname;
+            caches.open(DATA_CACHE).then((cache) => cache.put(cleanKey, clone));
           }
           return response;
         })
         .catch(() => {
-          // Fallback a cache si no hay conexión
-          return caches.match(request).then(
+          const cleanKey = url.origin + url.pathname;
+          return caches.match(cleanKey).then(
             (cached) =>
               cached ||
-              new Response(
-                JSON.stringify({
-                  message: "Sin conexión - recurso no disponible",
-                }),
-                {
-                  status: 503,
-                  headers: { "Content-Type": "application/json" },
-                },
-              ),
+              new Response(JSON.stringify([]), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              }),
           );
         }),
     );
     return;
   }
 
-  // cache-first para static assets
-  event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((response) => {
-          if (response.ok && response.type === "basic") {
+  // External resources (CDN, APIs): network-first, cache fallback, update cache
+  if (url.hostname !== self.location.hostname) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            const cleanRequest = new Request(url.origin + url.pathname);
+            caches.open(CDN_CACHE).then((cache) => cache.put(cleanRequest, clone));
           }
           return response;
+        })
+        .catch(() => {
+          const cleanRequest = new Request(url.origin + url.pathname);
+          return caches.match(cleanRequest);
         }),
-    ),
+    );
+    return;
+  }
+
+  // Static assets: network-first, cache fallback, update cache
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok && response.type === "basic") {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(request);
+      }),
   );
 });
 
@@ -371,35 +191,3 @@ self.addEventListener("sync", (event) => {
     );
   }
 });
-
-// ── Helper Functions ─────────────────────────────────────────────────────────
-function saveTimestamp(url, date) {
-  // Guardar en IndexedDB para recuperar timestamps
-  const dbName = "censoDB";
-  const storeName = "timestamps";
-  const openRequest = indexedDB.open(dbName, 1);
-
-  openRequest.onupgradeneeded = (e) => {
-    const db = e.target.result;
-    if (!db.objectStoreNames.contains(storeName)) {
-      db.createObjectStore(storeName);
-    }
-  };
-
-  openRequest.onsuccess = (e) => {
-    const db = e.target.result;
-    const tx = db.transaction(storeName, "readwrite");
-    const store = tx.objectStore(storeName);
-    store.put(date.getTime(), url);
-  };
-}
-
-// Limpiar cache antiguo periódicamente
-async function cleanOldCache() {
-  const cacheNames = await caches.keys();
-  for (const name of cacheNames) {
-    if (name !== CACHE_NAME && name !== DATA_CACHE) {
-      await caches.delete(name);
-    }
-  }
-}
