@@ -82,11 +82,11 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // cache-first para llamadas API (cacheamos todo para funcionar sin conexión)
+  // cache-first para llamadas API
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
       caches.match(request).then((cached) => {
-        // Si está en cache, lo usamos y actualizamos en background
+        // Usar cache
         if (cached) {
           // Intentar actualizar en background
           fetch(request)
@@ -124,7 +124,7 @@ self.addEventListener("fetch", (event) => {
           return cached;
         }
 
-        // Si no está en cache, hacer la petición
+        // Usar red
         return fetch(request)
           .then((response) => {
             if (
@@ -172,7 +172,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Para otros dominios (recursos externos - Font Awesome, Leaflet, etc.)
   // Network-first with cache fallback
   if (url.hostname !== self.location.hostname) {
     event.respondWith(
