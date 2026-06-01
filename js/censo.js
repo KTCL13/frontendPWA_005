@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { enqueue } from './db.js';
+import { compressImageToBase64 } from './image-utils.js';
 
 function showToast(msg, type) {
   window.dispatchEvent(new CustomEvent('app:toast', { detail: { msg, type } }));
@@ -120,61 +121,18 @@ function compressAndPreview(file) {
   errEl.classList.add('hidden');
   sizeInfo.textContent = 'Comprimiendo imagen…';
 
-  const MAX_PX      = 600;
-  const MAX_B64_KB  = 48;   // un poco por debajo del límite del servidor (50 KB)
-
-  const img = new Image();
-  const objectUrl = URL.createObjectURL(file);
-
-  img.onload = () => {
-    URL.revokeObjectURL(objectUrl);
-
-    let { width, height } = img;
-    if (width > MAX_PX || height > MAX_PX) {
-      if (width >= height) {
-        height = Math.round((height * MAX_PX) / width);
-        width  = MAX_PX;
-      } else {
-        width  = Math.round((width * MAX_PX) / height);
-        height = MAX_PX;
-      }
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width  = width;
-    canvas.height = height;
-    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-
-    // Bajar calidad iterativamente hasta cumplir el límite
-    let quality = 0.6;
-    let base64  = canvas.toDataURL('image/jpeg', quality);
-    let kb      = (base64.length * 0.75) / 1024;
-
-    while (kb > MAX_B64_KB && quality > 0.1) {
-      quality -= 0.05;
-      base64   = canvas.toDataURL('image/jpeg', quality);
-      kb       = (base64.length * 0.75) / 1024;
-    }
-
-    if (kb > MAX_B64_KB) {
-      errEl.textContent = 'La imagen es demasiado grande incluso después de comprimir. Usa una foto más pequeña.';
+  compressImageToBase64(file)
+    .then(({ base64, kb, width, height, quality }) => {
+      sizeInfo.textContent = `Tamaño: ${kb.toFixed(1)} KB (${width}×${height}px, calidad ${Math.round(quality * 100)}%)`;
+      _fotoBase64 = base64;
+      document.getElementById('foto-preview').src = base64;
+      document.getElementById('foto-preview-wrap').classList.remove('hidden');
+    })
+    .catch((msg) => {
+      errEl.textContent = msg;
       errEl.classList.remove('hidden');
       sizeInfo.textContent = '';
-      return;
-    }
-
-    sizeInfo.textContent = `Tamaño: ${kb.toFixed(1)} KB (${width}×${height}px, calidad ${Math.round(quality * 100)}%)`;
-    _fotoBase64 = base64;
-    document.getElementById('foto-preview').src = base64;
-    document.getElementById('foto-preview-wrap').classList.remove('hidden');
-  };
-
-  img.onerror = () => {
-    errEl.textContent = 'No se pudo leer la imagen.';
-    errEl.classList.remove('hidden');
-  };
-
-  img.src = objectUrl;
+    });
 }
 
 function clearPhoto() {

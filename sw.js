@@ -1,6 +1,7 @@
 const CACHE_NAME = "censo-mascotas-v3";
 const DATA_CACHE = "censo-mascotas-data-v3";
 const CDN_CACHE = "censo-mascotas-cdn-v3";
+const IMAGE_CACHE = "censo-mascotas-images-v1";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -16,6 +17,7 @@ const STATIC_ASSETS = [
   "/js/mapa.js",
   "/js/notifications.js",
   "/js/cloudinary.js",
+  "/js/image-utils.js",
   "/js/cache-manager.js",
   "/js/connection-manager.js",
   "/js/panel-utils.js",
@@ -63,7 +65,7 @@ self.addEventListener("activate", (event) => {
         Promise.all(
           keys
             .filter(
-              (k) => k !== CACHE_NAME && k !== DATA_CACHE && k !== CDN_CACHE,
+              (k) => k !== CACHE_NAME && k !== DATA_CACHE && k !== CDN_CACHE && k !== IMAGE_CACHE,
             )
             .map((k) => caches.delete(k)),
         ),
@@ -106,6 +108,26 @@ self.addEventListener("fetch", (event) => {
 
   // External resources (CDN, APIs): network-first, cache fallback, update cache
   if (url.hostname !== self.location.hostname) {
+    const isImage = url.hostname.includes("res.cloudinary.com");
+    const isTile = url.hostname.includes("tile.openstreetmap.org");
+
+    if (isImage || isTile) {
+      event.respondWith(
+        caches.open(IMAGE_CACHE).then((cache) => {
+          return cache.match(request).then((cached) => {
+            if (cached) return cached;
+            return fetch(request).then((response) => {
+              if (response.ok) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            }).catch(() => undefined);
+          });
+        }),
+      );
+      return;
+    }
+
     event.respondWith(
       fetch(request)
         .then((response) => {

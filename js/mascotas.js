@@ -2,7 +2,8 @@ import { api } from "./api.js";
 import { enqueue } from "./db.js";
 import { uploadToCloudinary } from "./cloudinary.js";
 import { insertTimestampAfterTitle, onDataUpdate } from "./panel-utils.js";
-import { saveTimestamp, getFormattedTimestamp } from "./cache-manager.js";
+import { saveTimestamp } from "./cache-manager.js";
+import { compressImageToBase64 } from "./image-utils.js";
 
 function showToast(msg, type) {
   window.dispatchEvent(new CustomEvent("app:toast", { detail: { msg, type } }));
@@ -113,12 +114,8 @@ async function loadMascotas() {
   if (!grid) return;
   try {
     const mascotas = await api.get("/mascotas");
-    // Solo actualizar timestamp si hay conexión a internet (datos de red, no de caché)
-    if (navigator.onLine) {
-      await saveTimestamp("mascotas-list", new Date());
-      // Actualizar el elemento de timestamp en el DOM directamente
-      updateTimestampDisplay();
-    }
+    // Guardar timestamp de la actualización
+    await saveTimestamp("mascotas-list", new Date());
     if (!mascotas.length) {
       grid.innerHTML =
         '<p class="empty-state"><i class="fa-solid fa-paw"></i> No hay mascotas registradas aún.</p>';
@@ -229,20 +226,39 @@ async function handleSubmit(e) {
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';
 
   try {
-    let fotografia;
+    let fotografia = null;
+    let fotoBase64 = null;
+
     if (_currentFotoFile) {
-      statusEl.textContent = "Subiendo foto a Cloudinary…";
-      try {
-        fotografia = await uploadToCloudinary(_currentFotoFile);
-        statusEl.textContent = "";
-      } catch (uploadErr) {
-        statusEl.textContent = "";
-        errDiv.textContent = uploadErr.message;
-        errDiv.classList.remove("hidden");
-        btn.disabled = false;
-        btn.innerHTML =
-          '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
-        return;
+      if (navigator.onLine) {
+        statusEl.textContent = "Subiendo foto a Cloudinary…";
+        try {
+          fotografia = await uploadToCloudinary(_currentFotoFile);
+          statusEl.textContent = "";
+        } catch (uploadErr) {
+          statusEl.textContent = "";
+          errDiv.textContent = uploadErr.message;
+          errDiv.classList.remove("hidden");
+          btn.disabled = false;
+          btn.innerHTML =
+            '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
+          return;
+        }
+      } else {
+        statusEl.textContent = "Comprimiendo foto para envío posterior…";
+        try {
+          const { base64 } = await compressImageToBase64(_currentFotoFile);
+          fotoBase64 = base64;
+          statusEl.textContent = "";
+        } catch (compressErr) {
+          statusEl.textContent = "";
+          errDiv.textContent = compressErr.message;
+          errDiv.classList.remove("hidden");
+          btn.disabled = false;
+          btn.innerHTML =
+            '<i class="fa-solid fa-floppy-disk"></i> Guardar mascota';
+          return;
+        }
       }
     }
 
@@ -252,6 +268,7 @@ async function handleSubmit(e) {
       genero: document.getElementById("m-genero").value,
       edad: Number(document.getElementById("m-edad").value),
       ...(fotografia && { fotografia }),
+      ...(fotoBase64 && { _fotoBase64: fotoBase64 }),
     };
 
     if (navigator.onLine) {
@@ -259,7 +276,7 @@ async function handleSubmit(e) {
       showToast("Mascota registrada", "success");
     } else {
       await enqueue("mascotas_queue", dto);
-      showToast("Sin conexión — guardado localmente", "warning");
+      showToast("Sin conexión — guardado localmente. La foto se subirá al reconectar.", "warning");
     }
 
     closeModal();
@@ -279,18 +296,6 @@ async function handleSubmit(e) {
 function closeModal() {
   document.getElementById("modal-mascota")?.classList.add("hidden");
   document.getElementById("mascota-error")?.classList.add("hidden");
-}
-
-// ── Actualizar timestamp en el DOM ─────────────────────────────────────────
-
-async function updateTimestampDisplay() {
-  const timestampValue = document.querySelector(
-    ".panel-timestamp-container .timestamp-value",
-  );
-  if (timestampValue) {
-    const newTimestamp = await getFormattedTimestamp("mascotas-list");
-    timestampValue.textContent = newTimestamp;
-  }
 }
 
 // ── Popup de elección de cámara (frontal / trasera) ────────────────────────

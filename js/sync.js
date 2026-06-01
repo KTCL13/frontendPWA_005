@@ -1,5 +1,7 @@
 import { api } from './api.js';
 import { getQueue, clearItem } from './db.js';
+import { uploadToCloudinary } from './cloudinary.js';
+import { base64ToBlob } from './image-utils.js';
 
 function toast(msg, type) {
   window.dispatchEvent(new CustomEvent('app:toast', { detail: { msg, type } }));
@@ -10,6 +12,18 @@ async function drainQueue(store, endpoint) {
   let synced = 0;
   for (const item of items) {
     const { id, _queuedAt, ...data } = item;
+
+    if (store === 'mascotas_queue' && data._fotoBase64) {
+      try {
+        const blob = base64ToBlob(data._fotoBase64);
+        const file = new File([blob], `foto_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        data.fotografia = await uploadToCloudinary(file);
+      } catch {
+        delete data._fotoBase64;
+      }
+      delete data._fotoBase64;
+    }
+
     try {
       await api.post(endpoint, data);
       await clearItem(store, id);

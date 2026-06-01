@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { insertTimestampAfterTitle, onDataUpdate } from "./panel-utils.js";
-import { saveTimestamp, getFormattedTimestamp } from "./cache-manager.js";
+import { saveTimestamp } from "./cache-manager.js";
 
 function showToast(msg, type) {
   window.dispatchEvent(new CustomEvent("app:toast", { detail: { msg, type } }));
@@ -110,12 +110,8 @@ async function loadPersonas() {
 
   try {
     const personas = await api.get("/personas");
-    // Solo actualizar timestamp si hay conexión a internet (datos de red, no de caché)
-    if (navigator.onLine) {
-      await saveTimestamp("personas-list", new Date());
-      // Actualizar el elemento de timestamp en el DOM directamente
-      updateTimestampDisplay();
-    }
+    // Guardar timestamp de la actualización
+    await saveTimestamp("personas-list", new Date());
     if (!personas.length) {
       container.innerHTML =
         '<p class="empty-state"><i class="fa-solid fa-users-slash"></i> No hay personas registradas.</p>';
@@ -229,20 +225,6 @@ function setupPersonaModal() {
 function closePersonaModal() {
   document.getElementById("modal-persona")?.classList.add("hidden");
 }
-
-// ── Actualizar timestamp en el DOM ─────────────────────────────────────────
-
-async function updateTimestampDisplay() {
-  const timestampValue = document.querySelector(
-    ".panel-timestamp-container .timestamp-value",
-  );
-  if (timestampValue) {
-    const newTimestamp = await getFormattedTimestamp("personas-list");
-    timestampValue.textContent = newTimestamp;
-  }
-}
-
-// ── Utilidades ─────────────────────────────────────────────────────────────
 
 function esc(str) {
   return String(str ?? "")
